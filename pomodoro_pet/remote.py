@@ -118,7 +118,10 @@ class PetService(QObject):
             return
         line = bytes(sock.readLine()).decode(errors="replace")
         try:
-            method, *args = json.loads(line)
+            request = json.loads(line)
+            if not isinstance(request, list) or not request:
+                raise ValueError("expected [method, args...]")
+            method, *args = request
             if method not in LOCAL_METHODS or not all(isinstance(a, str) for a in args):
                 raise ValueError(f"unknown method {method!r}")
             reply = {"ok": True, "result": getattr(self, method)(*args) or ""}

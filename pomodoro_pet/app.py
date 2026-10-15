@@ -768,17 +768,31 @@ def lock_owner_is_pet(lock) -> bool:
         pid = int(info[0])
     except (TypeError, ValueError, IndexError):
         return True  # can't tell: assume it is
-    if not os.path.isdir("/proc"):
-        return True
+    if os.path.isdir("/proc"):
+        try:
+            with open(f"/proc/{pid}/cmdline", "rb") as fh:
+                args = fh.read().decode(errors="replace").split("\0")
+        except OSError:
+            return False  # gone
+        # `python -m pomodoro_pet ...` or the installed `pomodoro-pet` launcher script
+        module = any(a == "-m" and b == "pomodoro_pet" for a, b in zip(args, args[1:], strict=False))
+        script = any(os.path.basename(arg) == APP_ID for arg in args[:2])
+        return module or script
+    # macOS: no /proc, ask ps (the command line comes back as one string)
+    import re
+    import subprocess
+
     try:
-        with open(f"/proc/{pid}/cmdline", "rb") as fh:
-            args = fh.read().decode(errors="replace").split("\0")
-    except OSError:
+        out = subprocess.run(
+            ["ps", "-ww", "-o", "command=", "-p", str(pid)], capture_output=True, text=True, timeout=3
+        )
+    except (OSError, subprocess.SubprocessError):
+        return True  # can't tell
+    command = out.stdout.strip()
+    if not command:
         return False  # gone
-    # `python -m pomodoro_pet ...` or the installed `pomodoro-pet` launcher script
-    module = any(a == "-m" and b == "pomodoro_pet" for a, b in zip(args, args[1:], strict=False))
-    script = any(os.path.basename(arg) == APP_ID for arg in args[:2])
-    return module or script
+    # `python -m pomodoro_pet`, the launcher script or the app's .../Contents/MacOS/pomodoro-pet
+    return bool(re.search(r"(^|\s)-m pomodoro_pet(\s|$)", command) or re.search(r"(^|/)pomodoro-pet(\s|$)", command))
 
 
 def main(argv: list[str] | None = None) -> int:

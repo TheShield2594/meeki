@@ -1,5 +1,6 @@
 """The local-socket remote control used where there's no D-Bus (macOS)."""
 
+import json
 import os
 import subprocess
 import sys
@@ -55,35 +56,48 @@ def test_commands_over_local_socket(monkeypatch, qapp):
         lock.unlock()
 
 
-def test_rejects_unknown_methods(monkeypatch, qapp):
-    from PySide6.QtNetwork import QLocalSocket
+class FakeSocket:
+    """Stands in for the server side of a QLocalSocket connection."""
 
+    def __init__(self, line: bytes):
+        self.line, self.written, self.closed = line, b"", False
+
+    def canReadLine(self):  # noqa: N802
+        return True
+
+    def readLine(self):  # noqa: N802
+        return self.line
+
+    def write(self, data):
+        self.written += data
+
+    def flush(self):
+        pass
+
+    def disconnectFromServer(self):  # noqa: N802
+        self.closed = True
+
+
+def test_local_socket_requests():
     from pomodoro_pet.remote import PetService
 
-    runtime = tempfile.mkdtemp(prefix="pp")
-    monkeypatch.setenv("XDG_RUNTIME_DIR", runtime)
-    service = PetService(lambda: "")
-    positions = []
+    service = PetService(lambda: "Idle")
+    positions, commands = [], []
     service.position_reported.connect(lambda x, y: positions.append((x, y)))
-    assert service._listen_local()
-    sock = QLocalSocket()
-    sock.connectToServer(os.path.join(runtime, "pomodoro-pet.sock"))
-    reply = b""
-    try:
-        for _ in range(200):
-            qapp.processEvents()
-            if sock.state() == QLocalSocket.ConnectedState:
-                break
-            time.sleep(0.01)
-        sock.write(b'["reportPosition", "1,2"]\n')
-        sock.flush()
-        for _ in range(200):
-            qapp.processEvents()
-            sock.waitForReadyRead(10)
-            reply += bytes(sock.readAll())
-            if reply.endswith(b"\n"):
-                break
-    finally:
-        service.unregister()
-    assert b'"ok": false' in reply
+    service.command.connect(commands.append)
+
+    def ask(line: bytes) -> dict:
+        sock = FakeSocket(line)
+        service._serve_local(sock)
+        assert sock.closed
+        return json.loads(sock.written)
+
+    assert ask(b'["Status"]\n') == {"ok": True, "result": "Idle"}
+    assert ask(b'["Skip"]\n') == {"ok": True, "result": ""}
+    assert commands == ["skip"]
+    # KWin-only methods, bad arguments and garbage are refused
+    assert ask(b'["reportPosition", "1,2"]\n')["ok"] is False
+    assert ask(b'["SetIntention", 5]\n')["ok"] is False
+    assert ask(b'{"Status": 1}\n')["ok"] is False
+    assert ask(b"not json\n")["ok"] is False
     assert positions == []
