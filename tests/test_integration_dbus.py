@@ -99,6 +99,8 @@ def test_remote_control_dnd_and_resume(env):
 
         cli(e, "--skip")  # into the short break: DND lifted before the notification
         assert wait_for(lambda: len(events(log)) == 4)
+        # the notification comes from a separate notify-send process: wait for it to land
+        assert wait_for(lambda: any(line.startswith("notify") for line in log.read_text().splitlines()))
         lines = log.read_text().splitlines()
         last_release = max(i for i, line in enumerate(lines) if line == "released")
         last_notify = max(i for i, line in enumerate(lines) if line.startswith("notify"))
