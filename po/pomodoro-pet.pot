@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: pomodoro-pet 0.2.0\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-15 16:15+0000\n"
+"POT-Creation-Date: 2026-10-15 17:08+0000\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -965,6 +965,10 @@ msgstr[1] ""
 #: pomodoro_pet/stats_window.py
 #, python-brace-format
 msgid "best {n}"
+msgstr ""
+
+#: pomodoro_pet/stats_window.py
+msgid "focused"
 msgstr ""
 
 #: pomodoro_pet/stats_window.py

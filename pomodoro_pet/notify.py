@@ -52,6 +52,7 @@ def notify(summary: str, body: str = "", icon: str = APP_ID) -> None:
             f"--icon={icon}",
             f"--hint=string:desktop-entry:{APP_ID}",
             "--expire-time=8000",
+            "--",
             summary,
             body,
         ]):
@@ -99,7 +100,7 @@ def notify_with_actions(summary: str, body: str, actions: list[tuple[str, str]],
     proc = QProcess()
     argv = [f"--app-name={APP_NAME}", f"--icon={APP_ID}", f"--hint=string:desktop-entry:{APP_ID}"]
     argv += [f"--action={name}={label}" for name, label in actions]
-    argv += [summary, body]
+    argv += ["--", summary, body]
 
     def finished(*_args) -> None:
         if proc not in _pending:

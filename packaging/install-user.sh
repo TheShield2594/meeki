@@ -22,7 +22,14 @@ export PYTHONPATH="$ROOT\${PYTHONPATH:+:\$PYTHONPATH}"
 exec python3 -m pomodoro_pet "\$@"
 WRAP
 chmod +x "$BIN/pomodoro-pet"
-sed "s|^Exec=pomodoro-pet|Exec=$BIN/pomodoro-pet|" "$ROOT/packaging/pomodoro-pet.desktop" >"$DATA/applications/pomodoro-pet.desktop"
+# Point every Exec= line (main entry and the actions) at the wrapper, quoted
+# per the desktop-entry spec so a $HOME with spaces etc. still works.
+exe=$BIN/pomodoro-pet
+exe=${exe//\\/\\\\}; exe=${exe//\"/\\\"}; exe=${exe//\`/\\\`}; exe=${exe//\$/\\\$}
+exe=${exe//\\/\\\\}  # string-value escaping applies on top of the quoting
+exe=${exe//%/%%}
+EXE="\"$exe\"" awk '/^Exec=pomodoro-pet/ { $0 = "Exec=" ENVIRON["EXE"] substr($0, 18) } { print }' \
+    "$ROOT/packaging/pomodoro-pet.desktop" >"$DATA/applications/pomodoro-pet.desktop"
 # Global shortcuts (Meta+Shift+P = start/pause); KDE picks these up at next login.
 cp "$DATA/applications/pomodoro-pet.desktop" "$DATA/kglobalaccel/pomodoro-pet.desktop"
 for s in 48 64 128 256; do

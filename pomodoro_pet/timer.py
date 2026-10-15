@@ -413,6 +413,7 @@ class PomodoroTimer(QObject):
             "phase": self.phase.value,
             "round": self.round,
             "remaining": round(self.remaining(), 3),
+            "phase_total": round(self._phase_total, 3),
             "saved_at": wall,
         }
         if self.in_overtime:
@@ -439,6 +440,7 @@ class PomodoroTimer(QObject):
             overtime = float(data["overtime"]) if data.get("overtime") is not None else None
             overtime_since = float(data.get("overtime_since") or 0)
             ends_at = float(data["ends_at"]) if state is State.RUNNING and overtime is None else None
+            total = float(data.get("phase_total") or self.duration(phase))
         except (KeyError, TypeError, ValueError):
             return False
         if state not in (State.RUNNING, State.PAUSED) or wall - saved_at > MAX_RESTORE_AGE:
@@ -446,7 +448,7 @@ class PomodoroTimer(QObject):
 
         self._qtimer.stop()
         self.phase, self.round = phase, rnd
-        self._phase_total = float(self.duration(phase))
+        self._phase_total = max(1.0, total)
         self._extendable = False
         self._warned = self.warn_seconds > 0 and remaining <= self.warn_seconds
         self.phase_changed.emit(phase)
@@ -466,7 +468,7 @@ class PomodoroTimer(QObject):
             return True
         if state is State.PAUSED:
             self._deadline = None
-            self._remaining = min(remaining, self.duration(phase))
+            self._remaining = min(remaining, self._phase_total)
             self._set_state(State.PAUSED)
             self._emit_tick(force=True)
             return True

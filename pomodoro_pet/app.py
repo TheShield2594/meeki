@@ -141,11 +141,16 @@ class Controller:
                 QTimer.singleShot(0, lambda: self._start_kwin(None))
 
         # Pick up a session that was running when the app last quit (or crashed).
+        # restore() can end a phase right away; its handlers read the mood and intention.
+        self._refresh_mood(react=False)
         self._restoring = True
         session = load_session()
+        if session:
+            self.intention = str(session.get("intention") or "")[:120]
         if self.timer.restore(session):
-            self.intention = str(session.get("intention") or "")
             log.info("Resumed session: %s", self.status_text())
+        else:
+            self.intention = ""
         self._restoring = False
         if intention is not None:
             self.intention = intention.strip()[:120]

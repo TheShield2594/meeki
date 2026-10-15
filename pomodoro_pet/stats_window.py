@@ -198,7 +198,7 @@ class StatsWindow(QWidget):
             ngettext("{n} day", "{n} days", s.streak).format(n=s.streak),
             _("best {n}").format(n=s.best_streak),
         )
-        self.week.set(format_minutes(s.week_minutes), "focused")
+        self.week.set(format_minutes(s.week_minutes), _("focused"))
         self.total.set(
             str(s.total_rounds),
             ngettext("round · {time}", "rounds · {time}", s.total_rounds).format(time=format_minutes(s.total_minutes)),

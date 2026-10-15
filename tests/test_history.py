@@ -113,3 +113,22 @@ def test_pets_help_a_little_but_are_capped():
     assert mood([pet] * 10, NOW).score == base + 9  # capped at three
     assert "got 1 pet today" in mood([pet], NOW).reason
     assert summarize([pet], NOW).today_minutes == 0  # pets aren't focus time
+
+
+def test_load_skips_records_that_would_break_stats(tmp_path):
+    path = tmp_path / "history.jsonl"
+    good = focus(intention="Write")
+    bad = [
+        {**good, "type": None},
+        {**good, "type": 3},
+        {**good, "end": True},
+        {**good, "end": 1e300},
+        {**good, "seconds": "lots"},
+        {**good, "active_seconds": None},
+        {**good, "intention": ["x"]},
+        ["not", "a", "dict"],
+    ]
+    path.write_text("\n".join(json.dumps(r) for r in [good, *bad, brk()]) + "\n")
+    loaded = History(path).load().records
+    assert [r["type"] for r in loaded] == ["focus", "short_break"]
+    stats_text(loaded, "Biscuit", now=NOW)  # doesn't raise

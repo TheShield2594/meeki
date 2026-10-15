@@ -36,6 +36,23 @@ def history_path() -> Path:
     return Path(base) / APP_ID / "history.jsonl"
 
 
+def _number(value: Any) -> bool:
+    return isinstance(value, (int, float)) and not isinstance(value, bool)
+
+
+def _valid(rec: Any) -> bool:
+    """Hand-edited lines mustn't crash startup or --stats: check the fields stats rely on."""
+    if not isinstance(rec, dict) or not isinstance(rec.get("type"), str) or not _number(rec.get("end")):
+        return False
+    try:
+        datetime.fromtimestamp(rec["end"])
+    except (OverflowError, OSError, ValueError):
+        return False
+    if any(key in rec and not _number(rec[key]) for key in ("seconds", "active_seconds")):
+        return False
+    return rec.get("intention") is None or isinstance(rec["intention"], str)
+
+
 class History:
     def __init__(self, path: Path | None = None):
         self.path = path or history_path()
@@ -54,8 +71,10 @@ class History:
                     except ValueError:
                         log.warning("Skipping corrupt line %d in %s", n, self.path)
                         continue
-                    if isinstance(rec, dict) and isinstance(rec.get("end"), (int, float)):
+                    if _valid(rec):
                         self.records.append(rec)
+                    else:
+                        log.warning("Skipping malformed record on line %d in %s", n, self.path)
         except FileNotFoundError:
             pass
         except OSError as exc:

@@ -4,12 +4,17 @@ on:
   push:
   pull_request:
 
+permissions:
+  contents: read
+
 jobs:
   test:
     name: Lint & tests (Ubuntu, PySide6 wheels)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
@@ -40,6 +45,8 @@ jobs:
           pacman -Syu --noconfirm --needed git python pyside6 python-build python-installer \
             python-setuptools python-wheel python-pytest dbus glib2 libnotify gettext
       - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
       - name: makepkg (runs the test suite in check())
         run: |
           useradd -m builder

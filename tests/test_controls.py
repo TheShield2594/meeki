@@ -104,3 +104,28 @@ def test_theme_follows_dark_palette(controller, qapp):
         QApplication.sendEvent(controller.pet, QEvent(QEvent.PaletteChange))  # repaint, no crash
     finally:
         qapp.setPalette(old)
+
+
+def test_a_round_that_ended_while_closed_is_logged_with_its_intention(tmp_path, monkeypatch, qapp):
+    for var, sub in (("XDG_CONFIG_HOME", "config"), ("XDG_STATE_HOME", "state"), ("XDG_DATA_HOME", "data")):
+        monkeypatch.setenv(var, str(tmp_path / sub))
+    monkeypatch.setenv("DBUS_SESSION_BUS_ADDRESS", "unix:path=/nonexistent")
+    import time
+
+    from pomodoro_pet.app import Controller
+    from pomodoro_pet.config import Config, save_session
+
+    cfg = Config().load()
+    cfg["notifications"] = cfg["sound"] = False
+    cfg.save()
+    now = time.time()
+    save_session({"state": "running", "phase": "focus", "round": 1, "remaining": 60.0,
+                  "saved_at": now - 600, "ends_at": now - 540, "intention": "Write report"})
+    c = Controller(qapp, Config().load())
+    try:
+        [rec] = [r for r in c.history.records if r["type"] == "focus"]
+        assert rec["outcome"] == "completed" and rec["intention"] == "Write report"
+        assert c.intention == "Write report"
+    finally:
+        c.shutdown()
+        c.pet.close()

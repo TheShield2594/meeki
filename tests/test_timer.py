@@ -386,3 +386,22 @@ def test_adjust_adds_and_removes_time_but_keeps_a_second():
     t.adjust(-10_000)
     assert t.remaining_seconds() == 1
     assert round(t.elapsed()) == 100  # time actually spent is unchanged
+
+
+def test_restore_keeps_time_added_to_the_phase():
+    t1, c1 = make()
+    t1.start()
+    t1.adjust(5 * 60)
+    run_for(t1, c1, 60)
+    t1.pause()
+    snap = t1.snapshot(wall=10_000.0)
+
+    t2, c2 = make()
+    assert t2.restore(snap, wall=10_010.0)
+    assert t2.remaining_seconds() == 29 * 60  # not clamped back to 25 minutes
+    assert t2.elapsed() == 60
+    ended = []
+    t2.phase_ended.connect(lambda *a: ended.append(a))
+    t2.start()
+    run_for(t2, c2, 29 * 60)
+    assert ended[0][1] == 30 * 60 and ended[0][2] == "completed"
