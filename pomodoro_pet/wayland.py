@@ -29,6 +29,8 @@ from PySide6.QtGui import QGuiApplication
 
 from .remote import DBUS_IFACE, DBUS_PATH, DBUS_SERVICE
 
+OVERLAY_TITLE = "Pomodoro Pet — Break"  # the break overlay windows
+
 log = logging.getLogger(__name__)
 
 KWIN_PLUGIN = "pomodoro-pet-integration"
@@ -77,10 +79,10 @@ _KWIN_SCRIPT = r"""
     function windows() {
         return workspace.windowList ? workspace.windowList() : workspace.clientList();
     }
-    function matches(w) {
+    function ours(w, caption) {
         if (!w || w.popupWindow) return false;
         var cls = String(w.resourceClass || ""), name = String(w.resourceName || "");
-        return (cls === CFG.appId || name === CFG.appId) && String(w.caption) === CFG.caption;
+        return (cls === CFG.appId || name === CFG.appId) && String(w.caption) === caption;
     }
     function report(w) {
         var g = w.frameGeometry;
@@ -88,7 +90,14 @@ _KWIN_SCRIPT = r"""
                  String(Math.round(g.x)) + "," + String(Math.round(g.y)));
     }
     function setup(w) {
-        if (!matches(w)) return;
+        if (ours(w, CFG.overlayCaption)) {  // break overlay: above everything, out of the way
+            w.keepAbove = true;
+            w.skipTaskbar = true;
+            w.skipPager = true;
+            w.skipSwitcher = true;
+            return;
+        }
+        if (!ours(w, CFG.caption)) return;
         var id = String(w.internalId);
         if (handled.indexOf(id) !== -1) return;
         handled.push(id);
@@ -150,6 +159,7 @@ class KWinIntegration(QObject):
         cfg = {
             "appId": self.app_id,
             "caption": self.caption,
+            "overlayCaption": OVERLAY_TITLE,
             "keepAbove": bool(keep_above),
             "place": position is not None,
             "x": position[0] if position else 0,

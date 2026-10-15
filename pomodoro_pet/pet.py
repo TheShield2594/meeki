@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import time
 
 from PySide6.QtCore import QPoint, QPointF, QRect, QRectF, Qt, QTimer, Signal
@@ -74,6 +75,9 @@ class PetWindow(QWidget):
         self._drag_offset = QPoint()
         self._remaining = timer.remaining_seconds()
         self.mood_level = "content"  # see history.mood(); drives the idle pose
+        self._shake_until = 0.0
+        self._shake = QTimer(self, interval=33)
+        self._shake.timeout.connect(self._shake_step)
 
         self._anim = QTimer(self)
         self._anim.timeout.connect(self._advance)
@@ -90,6 +94,24 @@ class PetWindow(QWidget):
         self._celebrate_until = max(self._celebrate_until, time.monotonic() + seconds)
         self._refresh_state()
         QTimer.singleShot(int(seconds * 1000) + 50, self._refresh_state)
+
+    SHAKE_SECONDS = 1.2
+
+    def nudge(self) -> None:
+        """Wiggle to get your attention (break enforcement)."""
+        self._shake_until = time.monotonic() + self.SHAKE_SECONDS
+        self._shake.start()
+
+    def _shake_step(self) -> None:
+        if time.monotonic() >= self._shake_until:
+            self._shake.stop()
+        self.update()
+
+    def _shake_offset(self) -> float:
+        left = self._shake_until - time.monotonic()
+        if left <= 0:
+            return 0.0
+        return math.sin(left * 42) * self.sprite_size * 0.05 * (left / self.SHAKE_SECONDS)
 
     def set_mood(self, level: str) -> None:
         if level != self.mood_level:
@@ -135,7 +157,7 @@ class PetWindow(QWidget):
         frames = self.sprites.get(self._anim_state) or []
         if frames:
             pm = frames[self._frame % len(frames)]
-            p.drawPixmap(self.sprite_rect, pm)
+            p.drawPixmap(self.sprite_rect.translated(round(self._shake_offset()), 0), pm)
         if self._anim_state == "idle" and self.mood_level in ("happy", "overjoyed"):
             self._paint_hearts(p)
 

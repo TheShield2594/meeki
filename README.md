@@ -30,9 +30,16 @@ with a pink bow.
   included in notifications and logged with each round
 - **Stats:** today's rounds and focus time, day streaks, a 7-day chart and
   your top focus topics, in a stats window or with `pomodoro-pet --stats`
+- **Pauses when you step away:** no keyboard/mouse for 3 minutes, or a
+  locked screen, pauses the focus round without counting the idle time. When
+  you're back you choose *Resume* or *I was working, count it*
+- **Break enforcement:** keep working during a break and the pup wiggles and
+  nags you, or in *Dim the screen* mode a full-screen break reminder appears
+  with snooze and skip
 - **A pup with moods:** Biscuit (rename it in the config) cheers up as you
   finish rounds and build streaks, floats hearts when happy, and sulks under a
-  rain cloud if you skip breaks, abandon rounds or stay away for days
+  rain cloud if you skip or work through breaks, abandon rounds or stay away
+  for days
 - The little **×** quits completely. No tray icon, no background process
 - Settings live in `~/.config/pomodoro-pet/config.json`
 
@@ -192,6 +199,44 @@ easy to process with `jq` or a spreadsheet. The **Stats** window shows:
 - **Focus time, last 7 days** as a bar chart (hover a bar for the exact value)
 - **Top focus this week:** time per intention
 
+### Stepping away (idle detection)
+
+Pomodoro Pet asks the desktop how long it's been since your last keyboard or
+mouse input. On Plasma it uses `org.freedesktop.ScreenSaver`, on both X11 and
+Wayland. GNOME and plain X11 have fallbacks.
+
+- **During a focus round:** after `idle_minutes` (default 3) without input,
+  or as soon as the screen locks, the round pauses. The idle minutes before
+  the pause are given back, so they don't count as focus.
+- **When you're back:** the pup says hello and a notification offers
+  **Resume** or **I was working, count it**. The second option is for reading,
+  a call or whiteboarding: the time away counts as focus and the timer resumes
+  (finishing the round if that covers it). You can also click the pup or press
+  the shortcut. Set `"idle_auto_resume": true` to resume without asking.
+- **During breaks:** being away is the point, so nothing pauses.
+
+Turn it off with *Pause when I step away* in the popover.
+
+### Break enforcement
+
+The **Breaks** setting in the popover decides how the pup handles you working
+through a break:
+
+- **Nudge me** (default): the first 20 seconds of a break are free. After
+  that, 30 seconds of continuous keyboard/mouse use gets a wiggle and a
+  reminder, then another every minute, each a bit firmer. The third also sends
+  a notification. Stepping away resets it.
+- **Dim the screen:** every monitor gets a full-screen break reminder with the
+  napping pup, the countdown and a stretch/rest tip. **Snooze 1 min** (twice
+  per break) or **Skip break** if you really must. It closes by itself when
+  the break ends.
+- **Off.**
+
+![Dim-the-screen break reminder](docs/break-overlay.png)
+
+The time you spent at the computer during each break is logged. A break
+spent mostly working counts against the pup's mood almost like a skipped one.
+
 ### The pup's mood
 
 Biscuit's mood comes from your history, not from a random roll:
@@ -200,6 +245,7 @@ Biscuit's mood comes from your history, not from a random roll:
 |---|---|
 | finishing focus rounds today | skipping a break |
 | keeping a day streak | abandoning a round (skip/reset after a minute or more) |
+| | working through most of a break |
 | | not seeing you for two days or more |
 
 Five levels: *overjoyed 🥰* and *happy 😊* float hearts, *content 🙂* is the
@@ -223,6 +269,10 @@ written automatically. Keys:
 | `auto_advance` | `true` | start the next phase automatically |
 | `notifications` | `true` | KDE notification when a phase ends |
 | `dnd_during_focus` | `true` | Plasma Do Not Disturb during focus rounds |
+| `idle_pause` | `true` | pause focus rounds when you step away |
+| `idle_minutes` | `3` | minutes without input that count as away (1–60). A locked screen counts at once |
+| `idle_auto_resume` | `false` | resume by itself when you're back, instead of asking |
+| `break_enforcement` | `"nudge"` | `"nudge"`, `"overlay"` (dim the screen) or `"off"` |
 | `sound` | `true` | play a chime when a phase ends |
 | `sound_file` | `null` | custom `.wav`/`.ogg` instead of the bundled chime |
 | `pet_name` | `"Biscuit"` | what the pup is called |
@@ -262,6 +312,8 @@ read it back, or stay above other windows**. Qt silently ignores `move()` and
    - moves it to the saved position,
    - reports every position change back to the app over D-Bus, so the position
      can be saved.
+
+   It also keeps the full-screen break reminder windows above everything else.
 
    The script is unloaded when you quit. Dragging uses
    `QWindow.startSystemMove()`, the Wayland-native way to move a window, so it
@@ -324,6 +376,8 @@ pomodoro_pet/
   remote.py     D-Bus service + client behind --toggle/--status and the shortcuts
   dnd.py        Plasma Do Not Disturb during focus rounds
   history.py    history log, stats, streaks and the pup's mood (pure functions)
+  idle.py       idle-time sources, away/back detection, break coaching
+  break_overlay.py  full-screen "dim the screen" break reminder
   stats_window.py  stats window with the 7-day chart
   notify.py     notify-send / gdbus / kdialog + pw-play / paplay / aplay
   assets.py     asset lookup and sprite loading (folders or sheets)

@@ -22,6 +22,12 @@ DEFAULTS: dict[str, Any] = {
     # Feedback
     "notifications": True,
     "dnd_during_focus": True,  # Plasma "Do Not Disturb" while a focus round runs
+    # Idle detection: pause focus when you step away
+    "idle_pause": True,
+    "idle_minutes": 3,  # no input for this long counts as away (screen lock: immediately)
+    "idle_auto_resume": False,  # resume by itself when you're back, instead of asking
+    # Breaks: "off" | "nudge" (pup nags if you keep working) | "overlay" (dim the screen)
+    "break_enforcement": "nudge",
     "sound": True,
     "sound_file": None,  # None -> bundled chime
     # Pet window
@@ -42,8 +48,10 @@ _INT_RANGES = {
     "short_break_minutes": (1, 120),
     "long_break_minutes": (1, 240),
     "rounds": (1, 12),
+    "idle_minutes": (1, 60),
 }
 _BACKENDS = ("auto", "wayland", "xcb")
+BREAK_MODES = ("off", "nudge", "overlay")
 
 
 def config_dir() -> Path:
@@ -121,6 +129,8 @@ def _sanitize(data: dict[str, Any]) -> dict[str, Any]:
         elif key == "position":
             if isinstance(value, dict) and isinstance(value.get("x"), int) and isinstance(value.get("y"), int):
                 cfg[key] = {"x": value["x"], "y": value["y"]}
+        elif key == "break_enforcement":
+            cfg[key] = value if value in BREAK_MODES else default
         elif key == "pet_name":
             cfg[key] = str(value).strip()[:40] or default
         elif key in ("sound_file", "sprite_dir"):

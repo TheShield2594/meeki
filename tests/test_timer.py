@@ -225,3 +225,31 @@ def test_skip_after_session_complete_does_nothing():
     log = ended_log(t)
     t.skip()
     assert log == [] and t.state is State.COMPLETE
+
+
+# ---- idle: pause with rewind, credit ---------------------------------------
+def test_pause_rewind_gives_back_idle_time_but_not_more_than_the_phase():
+    t, c = make()
+    t.start()
+    run_for(t, c, 600)
+    t.pause(rewind=200)
+    assert t.remaining_seconds() == 25 * 60 - 400
+    t.start()
+    t.pause(rewind=10_000)
+    assert t.remaining_seconds() == 25 * 60
+
+
+def test_credit_counts_away_time_and_can_finish_the_phase():
+    t, c = make()
+    t.start()
+    run_for(t, c, 600)
+    t.pause()
+    t.credit(300)
+    assert t.remaining_seconds() == 25 * 60 - 900
+    t.credit(10_000)
+    assert t.remaining_seconds() == 0
+    finished = []
+    t.phase_finished.connect(lambda a, b: finished.append(a))
+    t.start()
+    t.update()
+    assert finished == [Phase.FOCUS] and t.phase is Phase.SHORT_BREAK

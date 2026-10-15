@@ -42,11 +42,12 @@ def env(tmp_path):
         XDG_DATA_HOME=str(tmp_path / "data"),
         QT_QPA_PLATFORM="offscreen",
         PYTHONPATH=str(ROOT),
+        POMODORO_PET_IDLE_POLL="0.3",
     )
     e.pop("WAYLAND_DISPLAY", None)
     e["XDG_SESSION_TYPE"] = "x11"
     log = tmp_path / "notifications.log"
-    fake = subprocess.Popen([sys.executable, str(ROOT / "tests" / "fake_notifications.py"), str(log)], env=e)
+    fake = subprocess.Popen([sys.executable, str(ROOT / "tests" / "fake_desktop.py"), str(log)], env=e)
     assert wait_for(lambda: log.exists() and "ready" in log.read_text())
     yield e, log, tmp_path
     fake.terminate()
@@ -145,5 +146,49 @@ def test_start_launches_and_survives_a_crash(env):
     try:
         status = cli(e, "--status")[1]
         assert status.startswith("Focus · round 1/4") and not status.endswith("(paused)")
+    finally:
+        stop_app(app)
+
+
+def screensaver(e, method, *args):
+    subprocess.run(
+        ["gdbus", "call", "--session", "--dest", "org.freedesktop.ScreenSaver", "--object-path", "/ScreenSaver",
+         "--method", f"org.freedesktop.ScreenSaver.{method}", *args],
+        env=e, check=True, capture_output=True, timeout=10,
+    )
+
+
+@pytest.mark.skipif(shutil.which("gdbus") is None, reason="needs gdbus")
+def test_idle_pauses_focus_and_welcomes_you_back(env):
+    e, log, _ = env
+    app = subprocess.Popen([sys.executable, "-m", "pomodoro_pet", "--start"], env=e)
+    try:
+        assert wait_for(lambda: cli(e, "--status")[1].startswith("Focus · round 1/4"))
+        time.sleep(1)
+        screensaver(e, "SetIdle", "200000")  # no input for 200 s (> 3 min)
+        assert wait_for(lambda: "(paused)" in cli(e, "--status")[1])
+        # the idle time before the pause doesn't count as focus
+        assert cli(e, "--status")[1].startswith("Focus · round 1/4 · 25:00 left (paused)")
+        assert wait_for(lambda: "released" in events(log))  # Do Not Disturb lifted too
+
+        screensaver(e, "SetIdle", "0")  # back at the keyboard
+        assert wait_for(lambda: "notify Welcome back!" in log.read_text())
+        assert "(paused)" in cli(e, "--status")[1]  # waits for you to choose
+        if shutil.which("notify-send"):  # with libnotify the notification has buttons
+            assert wait_for(lambda: "actions resume credit" in log.read_text())
+            subprocess.run(
+                ["gdbus", "call", "--session", "--dest", "org.freedesktop.Notifications", "--object-path",
+                 "/org/freedesktop/Notifications", "--method", "org.freedesktop.Notifications.InvokeLast", "credit"],
+                env=e, check=True, capture_output=True, timeout=10,
+            )
+            # "I was working, count it": ~200 s away credited as focus, and running again
+            assert wait_for(lambda: "(paused)" not in cli(e, "--status")[1])
+            minutes_left = int(cli(e, "--status")[1].split(" · ")[2].split(":")[0])
+            assert 20 <= minutes_left <= 21
+            cli(e, "--pause")
+
+        cli(e, "--start")
+        screensaver(e, "SetLocked", "true")  # locking the screen pauses right away
+        assert wait_for(lambda: "(paused)" in cli(e, "--status")[1])
     finally:
         stop_app(app)

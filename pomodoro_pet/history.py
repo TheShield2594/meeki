@@ -213,13 +213,26 @@ class Mood:
 _LEVELS = [(80, "overjoyed", "🥰"), (60, "happy", "😊"), (40, "content", "🙂"), (20, "sulky", "😤"), (0, "sad", "🥺")]
 
 
+def worked_through_break(rec: Record) -> bool:
+    """A break that wasn't skipped but was mostly spent at the computer."""
+    seconds = float(rec.get("seconds", 0))
+    return (
+        rec.get("type", "").endswith("break")
+        and rec.get("outcome") == "completed"
+        and seconds >= 60
+        and float(rec.get("active_seconds", 0)) >= 0.6 * seconds
+    )
+
+
 def mood(records: list[Record], now: float | None = None) -> Mood:
-    """The pup likes finished rounds and streaks, dislikes skipped breaks and
-    abandoned rounds, and misses you after a couple of days away."""
+    """The pup likes finished rounds and streaks, dislikes skipped breaks,
+    breaks spent working, and abandoned rounds, and misses you after a couple
+    of days away."""
     today = _today(now)
     todays = [r for r in records if _day(r) == today]
     done = sum(1 for r in todays if _completed(r))
     skipped_breaks = sum(1 for r in todays if r.get("type", "").endswith("break") and r.get("outcome") == "skipped")
+    worked_breaks = sum(1 for r in todays if worked_through_break(r))
     abandoned = sum(
         1 for r in todays if _is_focus(r) and r.get("outcome") in ("skipped", "reset") and r.get("seconds", 0) >= 60
     )
@@ -227,7 +240,7 @@ def mood(records: list[Record], now: float | None = None) -> Mood:
     days = completed_days(records)
     away_days = (today - max(days)).days if days else 0
 
-    score = 50 + 8 * min(done, 5) + 2 * min(streak, 10) - 12 * skipped_breaks - 6 * abandoned
+    score = 50 + 8 * min(done, 5) + 2 * min(streak, 10) - 12 * skipped_breaks - 8 * worked_breaks - 6 * abandoned
     if away_days >= 2:
         score -= 10 * min(away_days - 1, 3)
     score = max(0, min(100, score))
@@ -235,6 +248,8 @@ def mood(records: list[Record], now: float | None = None) -> Mood:
     reasons = []
     if skipped_breaks:
         reasons.append(f"skipped {skipped_breaks} break{'s' if skipped_breaks > 1 else ''} today")
+    if worked_breaks:
+        reasons.append(f"worked through {worked_breaks} break{'s' if worked_breaks > 1 else ''} today")
     if away_days >= 2:
         reasons.append(f"hasn't seen you in {away_days} days")
     if abandoned:

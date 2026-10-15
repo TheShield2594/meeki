@@ -5,6 +5,7 @@ from __future__ import annotations
 from PySide6.QtCore import QPoint, QStringListModel, Qt, Signal
 from PySide6.QtWidgets import (
     QCheckBox,
+    QComboBox,
     QCompleter,
     QFormLayout,
     QFrame,
@@ -38,6 +39,7 @@ class Popover(QFrame):
     minimize_requested = Signal()
     intention_changed = Signal(str)
     stats_requested = Signal()
+    behavior_changed = Signal(bool, str)  # pause when away, break mode
 
     def __init__(self, timer: PomodoroTimer, parent: QWidget, show_minimize: bool = False):
         # Qt.Popup -> xdg_popup on Wayland, so it's positioned relative to the
@@ -75,6 +77,15 @@ class Popover(QFrame):
         form.addRow("Short break", self.short)
         form.addRow("Long break", self.long)
         form.addRow("Rounds", self.rounds)
+        self.break_mode = QComboBox()
+        for label, mode in (("Nudge me", "nudge"), ("Dim the screen", "overlay"), ("Off", "off")):
+            self.break_mode.addItem(label, mode)
+        self.break_mode.setToolTip(
+            "What the pup does if you keep using the computer during a break:\n"
+            "Nudge me: reminders when you keep working\n"
+            "Dim the screen: a full-screen break reminder with snooze/skip"
+        )
+        form.addRow("Breaks", self.break_mode)
 
         self.notify_box = QCheckBox("Notify")
         self.sound_box = QCheckBox("Sound")
@@ -84,6 +95,8 @@ class Popover(QFrame):
         checks.addStretch(1)
         self.dnd_box = QCheckBox("Do Not Disturb while focusing")
         self.dnd_box.setToolTip("Silence other notifications during focus rounds")
+        self.idle_box = QCheckBox("Pause when I step away")
+        self.idle_box.setToolTip("Pause focus rounds when there's no keyboard/mouse input for a few minutes")
 
         self.start_btn = QPushButton("Start")
         self.start_btn.setObjectName("primary")
@@ -116,6 +129,7 @@ class Popover(QFrame):
         layout.addLayout(form)
         layout.addLayout(checks)
         layout.addWidget(self.dnd_box)
+        layout.addWidget(self.idle_box)
         layout.addLayout(buttons)
         layout.addWidget(line)
         layout.addLayout(mood_row)
@@ -132,6 +146,8 @@ class Popover(QFrame):
         self.notify_box.toggled.connect(self._emit_toggles)
         self.sound_box.toggled.connect(self._emit_toggles)
         self.dnd_box.toggled.connect(self._emit_toggles)
+        self.idle_box.toggled.connect(self._emit_behavior)
+        self.break_mode.currentIndexChanged.connect(self._emit_behavior)
         self.intention.editingFinished.connect(self._commit_intention)
         self.intention.returnPressed.connect(self._start_from_intention)
         self.stats_btn.clicked.connect(self.stats_requested)
@@ -172,6 +188,17 @@ class Popover(QFrame):
 
     def set_suggestions(self, items: list[str]) -> None:
         self._suggestions.setStringList(items)
+
+    def load_behavior(self, idle_pause: bool, break_mode: str) -> None:
+        for w in (self.idle_box, self.break_mode):
+            w.blockSignals(True)
+        self.idle_box.setChecked(idle_pause)
+        self.break_mode.setCurrentIndex(max(0, self.break_mode.findData(break_mode)))
+        for w in (self.idle_box, self.break_mode):
+            w.blockSignals(False)
+
+    def _emit_behavior(self, *_args) -> None:
+        self.behavior_changed.emit(self.idle_box.isChecked(), self.break_mode.currentData())
 
     def set_stats(self, mood_text: str, summary_text: str) -> None:
         self.mood_label.setText(mood_text)

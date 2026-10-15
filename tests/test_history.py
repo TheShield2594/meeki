@@ -97,3 +97,10 @@ def test_stats_text_and_format():
     assert "Write report" in text
     assert format_minutes(59.6) == "1h 00m"
     assert format_minutes(135) == "2h 15m"
+
+
+def test_working_through_a_break_upsets_the_pup():
+    worked = dict(brk(0), active_seconds=250)  # 250 of 300 s at the keyboard
+    rested = dict(brk(0), active_seconds=30)
+    assert mood([focus(0), rested], NOW).score > mood([focus(0), worked], NOW).score
+    assert "worked through 1 break today" in mood([focus(0), worked], NOW).reason

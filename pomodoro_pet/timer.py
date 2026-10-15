@@ -144,14 +144,23 @@ class PomodoroTimer(QObject):
         self._qtimer.start()
         self._emit_tick(force=True)
 
-    def pause(self) -> None:
+    def pause(self, rewind: float = 0.0) -> None:
+        """Pause. `rewind` gives back seconds that shouldn't have counted
+        (e.g. you'd already walked away), never beyond the phase length."""
         if self.state is not State.RUNNING:
             return
-        self._remaining = self.remaining()
+        self._remaining = min(self._phase_total, self.remaining() + max(0.0, rewind))
         self._deadline = None
         self._qtimer.stop()
         self._set_state(State.PAUSED)
         self._emit_tick(force=True)
+
+    def credit(self, seconds: float) -> None:
+        """While paused: count `seconds` as done after all (e.g. "I was working
+        while away"). Starting again then finishes the phase if nothing's left."""
+        if self.state is State.PAUSED:
+            self._remaining = max(0.0, self._remaining - max(0.0, seconds))
+            self._emit_tick(force=True)
 
     def toggle(self) -> None:
         if self.state is State.RUNNING:

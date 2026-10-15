@@ -82,3 +82,34 @@ def play_sound(sound_file: str | None = None) -> None:
                 if _spawn(argv):
                     return
     QApplication.beep()
+
+
+_pending: list = []  # keep running QProcess objects alive
+
+
+def notify_with_actions(summary: str, body: str, actions: list[tuple[str, str]], on_action) -> None:
+    """Notification with buttons, e.g. [("resume", "Resume")]. Calls
+    on_action(name) when one is clicked. Needs libnotify's notify-send
+    (0.7.10+); otherwise falls back to a plain notification."""
+    if not shutil.which("notify-send"):
+        notify(summary, body)
+        return
+    from PySide6.QtCore import QProcess
+
+    proc = QProcess()
+    argv = [f"--app-name={APP_NAME}", f"--icon={APP_ID}", f"--hint=string:desktop-entry:{APP_ID}"]
+    argv += [f"--action={name}={label}" for name, label in actions]
+    argv += [summary, body]
+
+    def finished(*_args) -> None:
+        choice = bytes(proc.readAllStandardOutput()).decode(errors="replace").strip()
+        if proc in _pending:
+            _pending.remove(proc)
+        if proc.exitCode() != 0 and not choice:
+            log.debug("notify-send --action failed: %s", bytes(proc.readAllStandardError()).decode(errors="replace"))
+        if choice in {name for name, _ in actions}:
+            on_action(choice)
+
+    proc.finished.connect(finished)
+    _pending.append(proc)
+    proc.start("notify-send", argv)
