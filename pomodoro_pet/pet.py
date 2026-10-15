@@ -45,25 +45,7 @@ class PetWindow(QWidget):
         self.setAttribute(Qt.WA_NoSystemBackground, True)
         self.setMouseTracking(True)
 
-        s = scale
-        self.sprite_size = round(112 * s)
-        bubble_w, bubble_h = round(82 * s), round(44 * s)
-        self.close_rect = QRect(2, 2, round(18 * s), round(18 * s))
-        self.sprite_rect = QRect(0, round(14 * s), self.sprite_size, self.sprite_size)
-        self.bubble_rect = QRect(self.sprite_size - round(14 * s), round(4 * s), bubble_w, bubble_h)
-        width = self.bubble_rect.right() + 4
-        height = self.sprite_rect.bottom() + 2
-        self.setFixedSize(width, height)
-        self.font_time = QFont()
-        self.font_time.setPixelSize(round(17 * s))
-        self.font_time.setBold(True)
-        self.font_time.setStyleHint(QFont.Monospace)
-        # Clicks outside the visible shapes fall through to whatever is below.
-        self.setMask(
-            QRegion(self.sprite_rect)
-            .united(QRegion(self.bubble_rect.adjusted(-8, 0, 2, 8)))
-            .united(QRegion(self.close_rect.adjusted(-2, -2, 2, 2)))
-        )
+        self.set_scale(scale)
 
         self._frame = 0
         self._anim_state = "idle"
@@ -88,6 +70,33 @@ class PetWindow(QWidget):
         timer.tick.connect(self._on_tick)
         timer.state_changed.connect(lambda *_: self._refresh_state())
         timer.phase_changed.connect(lambda *_: self._refresh_state())
+        self._refresh_state()
+
+    def set_scale(self, s: float) -> None:
+        """Lay the window out for a pet size multiplier (can change live)."""
+        self.sprite_size = round(112 * s)
+        bubble_w, bubble_h = round(82 * s), round(44 * s)
+        self.close_rect = QRect(2, 2, round(18 * s), round(18 * s))
+        self.sprite_rect = QRect(0, round(14 * s), self.sprite_size, self.sprite_size)
+        self.bubble_rect = QRect(self.sprite_size - round(14 * s), round(4 * s), bubble_w, bubble_h)
+        width = self.bubble_rect.right() + 4
+        height = self.sprite_rect.bottom() + 2
+        self.setFixedSize(width, height)
+        self.font_time = QFont()
+        self.font_time.setPixelSize(round(17 * s))
+        self.font_time.setBold(True)
+        self.font_time.setStyleHint(QFont.Monospace)
+        # Clicks outside the visible shapes fall through to whatever is below.
+        self.setMask(
+            QRegion(self.sprite_rect)
+            .united(QRegion(self.bubble_rect.adjusted(-8, 0, 2, 8)))
+            .united(QRegion(self.close_rect.adjusted(-2, -2, 2, 2)))
+        )
+        self.update()
+
+    def set_sprites(self, sprites: dict) -> None:
+        self.sprites = sprites
+        self._frame = 0
         self._refresh_state()
 
     # ---- state & animation ---------------------------------------------

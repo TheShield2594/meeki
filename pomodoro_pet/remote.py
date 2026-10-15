@@ -3,7 +3,8 @@
 The running app owns io.github.pomodoropet on the session bus and exports
 /PomodoroPet with these methods:
 
-    Toggle, Start, Pause, Skip, Reset, Show   -> ()
+    Toggle, Start, Pause, Skip, Reset, Show,
+    Settings                                  -> ()
     Status                                    -> s
     SetIntention(s)                           what you're focusing on
     reportPosition(s)                         used by the KWin script
@@ -25,7 +26,7 @@ DBUS_SERVICE = "io.github.pomodoropet"
 DBUS_PATH = "/PomodoroPet"
 DBUS_IFACE = "io.github.pomodoropet.Pet"
 
-COMMANDS = ("toggle", "start", "pause", "skip", "reset", "show", "status")
+COMMANDS = ("toggle", "start", "pause", "skip", "reset", "show", "settings", "status")
 
 
 @ClassInfo({"D-Bus Interface": DBUS_IFACE})
@@ -85,6 +86,10 @@ class PetService(QObject):
     @Slot()
     def Show(self) -> None:  # noqa: N802
         self.command.emit("show")
+
+    @Slot()
+    def Settings(self) -> None:  # noqa: N802
+        self.command.emit("settings")
 
     @Slot(result=str)
     def Status(self) -> str:  # noqa: N802

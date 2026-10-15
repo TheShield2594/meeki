@@ -11,7 +11,7 @@ Keywords=pomodoro;timer;focus;tomato;productivity;pet;dog;
 StartupNotify=false
 StartupWMClass=pomodoro-pet
 SingleMainWindow=true
-Actions=toggle;skip;reset;
+Actions=toggle;skip;reset;settings;
 # Installed into share/kglobalaccel/ too, which turns the actions below into
 # KDE global shortcuts (System Settings -> Keyboard -> Shortcuts -> Pomodoro Pet).
 
@@ -27,3 +27,7 @@ Exec=pomodoro-pet --skip
 [Desktop Action reset]
 Name=Reset Session
 Exec=pomodoro-pet --reset
+
+[Desktop Action settings]
+Name=Settings
+Exec=pomodoro-pet --settings

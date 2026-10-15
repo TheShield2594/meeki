@@ -1,11 +1,11 @@
-"""Small settings/controls popover shown when the pet is clicked."""
+"""Quick-controls popover shown when the pet is clicked: what you're working
+on, the four durations, Start/Skip/Reset, the pup's mood, and buttons for the
+Stats and Settings windows. Everything else lives in the Settings window."""
 
 from __future__ import annotations
 
 from PySide6.QtCore import QPoint, QStringListModel, Qt, Signal
 from PySide6.QtWidgets import (
-    QCheckBox,
-    QComboBox,
     QCompleter,
     QFormLayout,
     QFrame,
@@ -32,17 +32,25 @@ STYLE = """
 QPushButton#primary { font-weight: 600; }
 """
 
+DURATION_KEYS = ("focus_minutes", "short_break_minutes", "long_break_minutes", "rounds")
+
+
+def make_spin(lo: int, hi: int, suffix: str = "") -> QSpinBox:
+    spin = QSpinBox()
+    spin.setRange(lo, hi)
+    spin.setSuffix(suffix)
+    spin.setAlignment(Qt.AlignRight)
+    return spin
+
 
 class Popover(QFrame):
-    settings_changed = Signal(int, int, int, int)  # focus, short, long, rounds
-    toggles_changed = Signal(bool, bool, bool)  # notifications, sound, do-not-disturb
-    minimize_requested = Signal()
+    options_changed = Signal(dict)  # {config key: value}
     intention_changed = Signal(str)
     stats_requested = Signal()
-    behavior_changed = Signal(bool, str)  # pause when away, break mode
-    flow_changed = Signal(bool, bool)  # flow mode, one-minute warning
+    settings_requested = Signal()
+    minimize_requested = Signal()
 
-    def __init__(self, timer: PomodoroTimer, parent: QWidget, show_minimize: bool = False):
+    def __init__(self, timer: PomodoroTimer, parent: QWidget):
         # Qt.Popup -> xdg_popup on Wayland, so it's positioned relative to the
         # pet even though we can't know global coordinates there.
         super().__init__(parent, Qt.Popup | Qt.FramelessWindowHint)
@@ -67,68 +75,42 @@ class Popover(QFrame):
         self.intention.setCompleter(completer)
         self._committed_intention = ""
 
-        self.focus = self._spin(1, 240, " min")
-        self.short = self._spin(1, 120, " min")
-        self.long = self._spin(1, 240, " min")
-        self.rounds = self._spin(1, 12, "")
-
+        self.spins = {
+            "focus_minutes": make_spin(1, 240, " min"),
+            "short_break_minutes": make_spin(1, 120, " min"),
+            "long_break_minutes": make_spin(1, 240, " min"),
+            "rounds": make_spin(1, 12),
+        }
         form = QFormLayout()
         form.setLabelAlignment(Qt.AlignRight)
-        form.addRow("Focus", self.focus)
-        form.addRow("Short break", self.short)
-        form.addRow("Long break", self.long)
-        form.addRow("Rounds", self.rounds)
-        self.break_mode = QComboBox()
-        for label, mode in (("Nudge me", "nudge"), ("Dim the screen", "overlay"), ("Off", "off")):
-            self.break_mode.addItem(label, mode)
-        self.break_mode.setToolTip(
-            "What the pup does if you keep using the computer during a break:\n"
-            "Nudge me: reminders when you keep working\n"
-            "Dim the screen: a full-screen break reminder with snooze/skip"
-        )
-        form.addRow("Breaks", self.break_mode)
-        self.focus_end = QComboBox()
-        self.focus_end.addItem("Start my break", False)
-        self.focus_end.addItem("Keep going (flow)", True)
-        self.focus_end.setToolTip(
-            "Keep going: when the round ends it counts as done, and the timer counts up\n"
-            "your overtime until you click Take break."
-        )
-        form.addRow("When focus ends", self.focus_end)
-
-        self.notify_box = QCheckBox("Notify")
-        self.sound_box = QCheckBox("Sound")
-        checks = QHBoxLayout()
-        checks.addWidget(self.notify_box)
-        checks.addWidget(self.sound_box)
-        checks.addStretch(1)
-        self.dnd_box = QCheckBox("Do Not Disturb while focusing")
-        self.dnd_box.setToolTip("Silence other notifications during focus rounds")
-        self.idle_box = QCheckBox("Pause when I step away")
-        self.idle_box.setToolTip("Pause focus rounds when there's no keyboard/mouse input for a few minutes")
+        for label, key in zip(("Focus", "Short break", "Long break", "Rounds"), DURATION_KEYS, strict=True):
+            form.addRow(label, self.spins[key])
+            self.spins[key].valueChanged.connect(lambda value, k=key: self.options_changed.emit({k: value}))
 
         self.start_btn = QPushButton("Start")
         self.start_btn.setObjectName("primary")
         self.start_btn.setDefault(True)
         self.reset_btn = QPushButton("Reset")
         self.skip_btn = QPushButton("Skip")
-        self.skip_btn.setToolTip("End the current phase now")
         buttons = QHBoxLayout()
         buttons.addWidget(self.start_btn, 2)
         buttons.addWidget(self.skip_btn, 1)
         buttons.addWidget(self.reset_btn, 1)
 
-        self.mood_label = QLabel()
-        self.stats_btn = QPushButton("Stats")
-        self.stats_btn.setToolTip("Focus history, streaks and charts")
-        mood_row = QHBoxLayout()
-        mood_row.addWidget(self.mood_label, 1)
-        mood_row.addWidget(self.stats_btn)
-        self.summary_label = QLabel()
-        self.summary_label.setObjectName("muted")
         line = QFrame()
         line.setFrameShape(QFrame.HLine)
         line.setFrameShadow(QFrame.Sunken)
+        self.mood_label = QLabel()
+        self.summary_label = QLabel()
+        self.summary_label.setObjectName("muted")
+        self.stats_btn = QPushButton("Stats")
+        self.stats_btn.setToolTip("Focus history, streaks and charts")
+        self.settings_btn = QPushButton("Settings")
+        self.settings_btn.setToolTip("Breaks, idle detection, flow mode, sounds, the pup…")
+        self.tray_btn = QPushButton("Minimize to tray (experimental)")
+        footer = QHBoxLayout()
+        footer.addWidget(self.stats_btn)
+        footer.addWidget(self.settings_btn)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(12, 10, 12, 12)
@@ -136,36 +118,23 @@ class Popover(QFrame):
         layout.addWidget(self.status)
         layout.addWidget(self.intention)
         layout.addLayout(form)
-        layout.addLayout(checks)
-        layout.addWidget(self.dnd_box)
-        layout.addWidget(self.idle_box)
-        self.warn_box = QCheckBox("1-minute warning")
-        self.warn_box.setToolTip("A soft heads-up a minute before a focus round or break ends")
-        layout.addWidget(self.warn_box)
         layout.addLayout(buttons)
         layout.addWidget(line)
-        layout.addLayout(mood_row)
+        layout.addWidget(self.mood_label)
         layout.addWidget(self.summary_label)
+        layout.addLayout(footer)
+        layout.addWidget(self.tray_btn)
+        self.tray_btn.hide()
 
-        if show_minimize:
-            tray_btn = QPushButton("Minimize to tray (experimental)")
-            tray_btn.clicked.connect(self.minimize_requested)
-            tray_btn.clicked.connect(self.hide)
-            layout.addWidget(tray_btn)
-
-        for spin in (self.focus, self.short, self.long, self.rounds):
-            spin.valueChanged.connect(self._emit_settings)
-        self.notify_box.toggled.connect(self._emit_toggles)
-        self.sound_box.toggled.connect(self._emit_toggles)
-        self.dnd_box.toggled.connect(self._emit_toggles)
-        self.idle_box.toggled.connect(self._emit_behavior)
-        self.break_mode.currentIndexChanged.connect(self._emit_behavior)
-        self.focus_end.currentIndexChanged.connect(self._emit_flow)
-        self.warn_box.toggled.connect(self._emit_flow)
         self.intention.editingFinished.connect(self._commit_intention)
         self.intention.returnPressed.connect(self._start_from_intention)
-        self.stats_btn.clicked.connect(self.stats_requested)
-        self.stats_btn.clicked.connect(self.hide)
+        for btn, signal in (
+            (self.stats_btn, self.stats_requested),
+            (self.settings_btn, self.settings_requested),
+            (self.tray_btn, self.minimize_requested),
+        ):
+            btn.clicked.connect(signal)
+            btn.clicked.connect(self.hide)
         self.start_btn.clicked.connect(self._commit_intention)
         self.start_btn.clicked.connect(self._primary)
         self.reset_btn.clicked.connect(timer.reset)
@@ -175,15 +144,28 @@ class Popover(QFrame):
         timer.phase_changed.connect(self.refresh)
         timer.overtime_started.connect(self.refresh)
 
-    @staticmethod
-    def _spin(lo: int, hi: int, suffix: str) -> QSpinBox:
-        spin = QSpinBox()
-        spin.setRange(lo, hi)
-        spin.setSuffix(suffix)
-        spin.setAlignment(Qt.AlignRight)
-        return spin
+    # ---- loading values (no signals) -----------------------------------
+    def load_options(self, cfg) -> None:
+        for key, spin in self.spins.items():
+            spin.blockSignals(True)
+            spin.setValue(cfg[key])
+            spin.blockSignals(False)
+        self.tray_btn.setVisible(bool(cfg["minimize_to_tray"]))
+        self.refresh()
 
-    # ---- intention / stats ---------------------------------------------
+    def set_intention(self, text: str) -> None:
+        self._committed_intention = text
+        if self.intention.text() != text:
+            self.intention.setText(text)
+
+    def set_suggestions(self, items: list[str]) -> None:
+        self._suggestions.setStringList(items)
+
+    def set_stats(self, mood_text: str, summary_text: str) -> None:
+        self.mood_label.setText(mood_text)
+        self.summary_label.setText(summary_text)
+
+    # ---- actions -------------------------------------------------------
     def _commit_intention(self) -> None:
         text = self.intention.text().strip()
         if text != self._committed_intention:
@@ -195,33 +177,6 @@ class Popover(QFrame):
         if self.timer.state is not State.RUNNING:
             self.timer.start()
         self.hide()
-
-    def set_intention(self, text: str) -> None:
-        self._committed_intention = text
-        if self.intention.text() != text:
-            self.intention.setText(text)
-
-    def set_suggestions(self, items: list[str]) -> None:
-        self._suggestions.setStringList(items)
-
-    def load_behavior(self, idle_pause: bool, break_mode: str) -> None:
-        for w in (self.idle_box, self.break_mode):
-            w.blockSignals(True)
-        self.idle_box.setChecked(idle_pause)
-        self.break_mode.setCurrentIndex(max(0, self.break_mode.findData(break_mode)))
-        for w in (self.idle_box, self.break_mode):
-            w.blockSignals(False)
-
-    def load_flow(self, flow: bool, warning: bool) -> None:
-        for w in (self.focus_end, self.warn_box):
-            w.blockSignals(True)
-        self.focus_end.setCurrentIndex(1 if flow else 0)
-        self.warn_box.setChecked(warning)
-        for w in (self.focus_end, self.warn_box):
-            w.blockSignals(False)
-
-    def _emit_flow(self, *_args) -> None:
-        self.flow_changed.emit(bool(self.focus_end.currentData()), self.warn_box.isChecked())
 
     def _primary(self) -> None:
         """Start/Pause/Resume, or "Take break" in overtime."""
@@ -236,36 +191,6 @@ class Popover(QFrame):
             self.timer.toggle()
         else:
             self.timer.skip()
-
-    def _emit_behavior(self, *_args) -> None:
-        self.behavior_changed.emit(self.idle_box.isChecked(), self.break_mode.currentData())
-
-    def set_stats(self, mood_text: str, summary_text: str) -> None:
-        self.mood_label.setText(mood_text)
-        self.summary_label.setText(summary_text)
-
-    def load(
-        self, focus: int, short: int, long: int, rounds: int, notifications: bool, sound: bool, dnd: bool
-    ) -> None:
-        widgets = (self.focus, self.short, self.long, self.rounds, self.notify_box, self.sound_box, self.dnd_box)
-        for w in widgets:
-            w.blockSignals(True)
-        self.focus.setValue(focus)
-        self.short.setValue(short)
-        self.long.setValue(long)
-        self.rounds.setValue(rounds)
-        self.notify_box.setChecked(notifications)
-        self.sound_box.setChecked(sound)
-        self.dnd_box.setChecked(dnd)
-        for w in widgets:
-            w.blockSignals(False)
-        self.refresh()
-
-    def _emit_settings(self) -> None:
-        self.settings_changed.emit(self.focus.value(), self.short.value(), self.long.value(), self.rounds.value())
-
-    def _emit_toggles(self) -> None:
-        self.toggles_changed.emit(self.notify_box.isChecked(), self.sound_box.isChecked(), self.dnd_box.isChecked())
 
     def refresh(self, *_args) -> None:
         t = self.timer
@@ -284,7 +209,7 @@ class Popover(QFrame):
         labels = {State.RUNNING: "Pause", State.PAUSED: "Resume"}
         if t.in_overtime:
             self.start_btn.setText("Take break")
-            self.skip_btn.setText(labels[t.state] if t.state in labels else "Pause")
+            self.skip_btn.setText(labels.get(t.state, "Pause"))
             self.skip_btn.setToolTip("")
         else:
             self.start_btn.setText(labels.get(t.state, "Start"))

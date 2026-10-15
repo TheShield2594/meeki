@@ -112,6 +112,7 @@ def test_remote_control_dnd_and_resume(env):
 
         cli(e, "--toggle")  # pause the break
         assert cli(e)[0] == 0  # second launch just talks to the running one
+        assert cli(e, "--settings")[0] == 0  # opens the settings window in the running pet
     finally:
         stop_app(app)
 

@@ -11,7 +11,7 @@ import tempfile
 import time
 
 from . import __version__
-from .config import APP_ID, Config, load_session, save_session
+from .config import APP_ID, Config, config_dir, load_session, sanitize, save_session
 from .history import History, format_minutes, mood, recent_intentions, stats_text, summarize
 from .remote import COMMANDS, PetService, send_command
 from .timer import Phase, PomodoroTimer, State, format_mmss
@@ -45,25 +45,20 @@ class Controller:
         )
         sprites = load_sprites(cfg["sprite_dir"])
         self.pet = PetWindow(self.timer, sprites, cfg["scale"])
-        self.popover = Popover(self.timer, self.pet, show_minimize=cfg["minimize_to_tray"])
-        self.popover.load(
-            cfg["focus_minutes"], cfg["short_break_minutes"], cfg["long_break_minutes"],
-            cfg["rounds"], cfg["notifications"], cfg["sound"], cfg["dnd_during_focus"],
-        )
+        self.popover = Popover(self.timer, self.pet)
+        self.popover.load_options(cfg)
         self.tray = None
+        self.settings_window = None
+        self._started_with = {k: cfg[k] for k in ("backend", "kwin_integration")}
 
         self.pet.clicked.connect(lambda: self.popover.popup_near(self.pet, self.pet.interaction_rect()))
         self.pet.quit_requested.connect(self.quit)
         self.pet.moved.connect(self._remember_position)
-        self.popover.settings_changed.connect(self._on_settings)
-        self.popover.toggles_changed.connect(self._on_toggles)
+        self.popover.options_changed.connect(self.set_options)
         self.popover.minimize_requested.connect(self.minimize_to_tray)
         self.popover.intention_changed.connect(self.set_intention)
         self.popover.stats_requested.connect(self.show_stats)
-        self.popover.load_behavior(cfg["idle_pause"], cfg["break_enforcement"])
-        self.popover.behavior_changed.connect(self._on_behavior)
-        self.popover.load_flow(cfg["flow_mode"], cfg["minute_warning"])
-        self.popover.flow_changed.connect(self._on_flow)
+        self.popover.settings_requested.connect(self.show_settings)
         self.timer.overtime_started.connect(self._on_overtime_started)
         self.timer.warning.connect(self._on_warning)
         self.timer.phase_ended.connect(self._on_phase_ended)
@@ -173,18 +168,89 @@ class Controller:
             self._save_debounce.start()
 
     # ---- settings ------------------------------------------------------
-    def _on_settings(self, focus: int, short: int, long: int, rounds: int) -> None:
-        self.cfg["focus_minutes"], self.cfg["short_break_minutes"] = focus, short
-        self.cfg["long_break_minutes"], self.cfg["rounds"] = long, rounds
-        self.timer.configure(focus, short, long, rounds)
+    def set_options(self, changes: dict) -> None:
+        """The one place settings change (popover, settings window). Values
+        are validated like the config file, applied live, then saved."""
+        from .assets import load_sprites
+
+        clean = sanitize({**self.cfg.data, **changes})
+        changed = {k: clean[k] for k in changes if k in clean and clean[k] != self.cfg[k]}
+        if not changed:
+            return
+        self.cfg.data.update(changed)
+        c, t = self.cfg, self.timer
+        keys = changed.keys()
+        if keys & {"focus_minutes", "short_break_minutes", "long_break_minutes", "rounds"}:
+            t.configure(c["focus_minutes"], c["short_break_minutes"], c["long_break_minutes"], c["rounds"])
+        t.auto_advance = c["auto_advance"]
+        t.flow = c["flow_mode"]
+        t.warn_seconds = 60 if c["minute_warning"] else 0
+        self.activity.away_after = c["idle_minutes"] * 60
+        if "scale" in keys:
+            self.pet.set_scale(c["scale"])
+        if "sprite_dir" in keys:
+            sprites = load_sprites(c["sprite_dir"])
+            self.pet.set_sprites(sprites)
+            self.overlay.frames = sprites["break"]
+        if "pet_name" in keys:
+            self.overlay.pet_name = c["pet_name"]
+            if self.stats_window is not None:
+                self.stats_window.pet_name = c["pet_name"]
+            self._refresh_mood(react=False)
+        if "break_enforcement" in keys and c["break_enforcement"] != "overlay":
+            self.overlay.end()
+        self._update_dnd()
+        self._update_break()
+        self._update_tooltip()
         self.pet.update()
+        # keep both settings surfaces showing the same values
+        self.popover.load_options(c)
+        if self.settings_window is not None:
+            self.settings_window.load(c)
         self._save_debounce.start()
 
-    def _on_toggles(self, notifications: bool, sound: bool, dnd: bool) -> None:
-        self.cfg["notifications"], self.cfg["sound"] = notifications, sound
-        self.cfg["dnd_during_focus"] = dnd
-        self._update_dnd()
-        self._save_debounce.start()
+    def show_settings(self) -> None:
+        from .history import history_path
+        from .settings_window import SettingsWindow
+
+        if self.settings_window is None:
+            self.settings_window = SettingsWindow(
+                str(config_dir()), str(history_path()), self.app.platformName(), self._started_with
+            )
+            self.settings_window.options_changed.connect(self.set_options)
+            self.settings_window.restart_requested.connect(self.restart)
+            self.settings_window.test_sound_requested.connect(self._test_sound)
+        self.settings_window.load(self.cfg)
+        self.settings_window.show()
+        self.settings_window.raise_()
+        self.settings_window.activateWindow()
+
+    def _test_sound(self) -> None:
+        from .notify import play_sound
+
+        play_sound(self.cfg["sound_file"])
+
+    def restart(self) -> None:
+        """Start a fresh instance (it waits for this one to exit) and quit."""
+        from PySide6.QtCore import QProcess, QProcessEnvironment
+
+        from .wayland import ORIGINAL_QT_QPA_PLATFORM
+
+        args = ["-m", "pomodoro_pet", "--restarted"]
+        if self.settings_window is not None and self.settings_window.isVisible():
+            args.append("--settings")
+        env = QProcessEnvironment.systemEnvironment()
+        env.remove("QT_QPA_PLATFORM")  # we may have set it ourselves; let the new backend setting decide
+        if ORIGINAL_QT_QPA_PLATFORM:
+            env.insert("QT_QPA_PLATFORM", ORIGINAL_QT_QPA_PLATFORM)
+        proc = QProcess()
+        proc.setProgram(sys.executable)
+        proc.setArguments(args)
+        proc.setProcessEnvironment(env)
+        if not proc.startDetached():
+            log.error("Couldn't restart Pomodoro Pet")
+            return
+        self.quit()
 
     # ---- timer state ---------------------------------------------------
     def _on_timer_changed(self, *_args) -> None:
@@ -294,13 +360,6 @@ class Controller:
         self.pet.setToolTip("\n".join(lines))
 
     # ---- idle detection ----------------------------------------------
-    def _on_behavior(self, idle_pause: bool, break_mode: str) -> None:
-        self.cfg["idle_pause"], self.cfg["break_enforcement"] = idle_pause, break_mode
-        if break_mode != "overlay":
-            self.overlay.end()
-        self._update_break()
-        self._save_debounce.start()
-
     def _on_away(self, idle: float) -> None:
         t = self.timer
         if self.cfg["idle_pause"] and t.in_overtime and t.state is State.RUNNING:
@@ -399,6 +458,8 @@ class Controller:
         actions = {"toggle": t.toggle, "start": t.start, "pause": t.pause, "skip": t.skip, "reset": t.reset}
         if command in actions:
             actions[command]()
+        elif command == "settings":
+            self.show_settings()
         elif command == "show":
             if self.tray is not None:
                 self.tray.hide()
@@ -446,13 +507,6 @@ class Controller:
             play_sound(self.cfg["sound_file"])
 
     # ---- flow mode & one-minute warning ---------------------------------
-    def _on_flow(self, flow: bool, warning: bool) -> None:
-        self.cfg["flow_mode"], self.cfg["minute_warning"] = flow, warning
-        self.timer.flow = flow
-        self.timer.warn_seconds = 60 if warning else 0
-        self.pet.update()
-        self._save_debounce.start()
-
     def _keep_going(self, _choice: str = "keep") -> None:
         if self.timer.extend_focus():
             self.say("Okay, keep going! I'll count your overtime 🌊")
@@ -531,10 +585,12 @@ def main(argv: list[str] | None = None) -> int:
         helps = {
             "toggle": "start or pause the timer", "start": "start/resume the timer", "pause": "pause the timer",
             "skip": "end the current phase now", "reset": "reset the session", "show": "show the pet",
+            "settings": "open the settings window",
             "status": "print the current phase and time left",
         }
         remote.add_argument(f"--{cmd}", dest="command", action="store_const", const=cmd, help=helps[cmd])
     remote.add_argument("--intention", metavar="TEXT", help="set what you're focusing on (combine with --start)")
+    parser.add_argument("--restarted", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--stats", action="store_true", help="print focus stats and the pup's mood, then exit")
     parser.add_argument("--backend", choices=("auto", "wayland", "xcb"), help="override the config's backend")
     parser.add_argument("--reset-position", action="store_true", help="forget the saved window position")
@@ -556,7 +612,8 @@ def main(argv: list[str] | None = None) -> int:
     runtime_dir = os.environ.get("XDG_RUNTIME_DIR") or tempfile.gettempdir()
     lock = QLockFile(os.path.join(runtime_dir, f"{APP_ID}.lock"))
     lock.setStaleLockTime(0)
-    if not lock.tryLock(100):
+    # After "Restart now" the old instance may still be shutting down: wait for it.
+    if not lock.tryLock(10_000 if args.restarted else 100):
         from PySide6.QtCore import QCoreApplication
 
         _core = QCoreApplication(sys.argv[:1])  # noqa: F841 (needed for D-Bus)
@@ -604,6 +661,8 @@ def main(argv: list[str] | None = None) -> int:
     log.info("Qt platform: %s", app.platformName())
 
     controller = Controller(app, cfg, autostart=args.command in ("start", "toggle"), intention=args.intention)
+    if args.command == "settings":
+        controller.show_settings()
 
     # Save and clean up on Ctrl+C / SIGTERM too. A no-op timer lets Python
     # handle signals while Qt's event loop is running.

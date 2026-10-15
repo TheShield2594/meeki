@@ -107,7 +107,7 @@ def save_session(data: dict | None, path: Path | None = None) -> None:
         log.warning("Could not save session to %s: %s", path, exc)
 
 
-def _sanitize(data: dict[str, Any]) -> dict[str, Any]:
+def sanitize(data: dict[str, Any]) -> dict[str, Any]:
     cfg = dict(DEFAULTS)
     for key, default in DEFAULTS.items():
         if key not in data:
@@ -153,7 +153,7 @@ class Config:
                 raw = json.load(fh)
             if not isinstance(raw, dict):
                 raise ValueError("config root is not an object")
-            self.data = _sanitize(raw)
+            self.data = sanitize(raw)
         except FileNotFoundError:
             self.data = dict(DEFAULTS)
         except (OSError, ValueError) as exc:

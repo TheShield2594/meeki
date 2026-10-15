@@ -123,6 +123,7 @@ Optional dependencies: `libnotify` (notifications), `pipewire` or `libpulse`
 | End overtime | **Take break** in the popover, or Skip / `pomodoro-pet --skip` |
 | Set what you're working on | type it in the popover's top field, then <kbd>Enter</kbd> to start |
 | See stats | **Stats** button in the popover |
+| Change settings | **Settings** button in the popover, the launcher's right-click menu, or `pomodoro-pet --settings` |
 | Check status and mood | hover the pup |
 | Quit | the small **×** at the top-left (shows clearly on hover) |
 
@@ -167,8 +168,8 @@ Under the hood the commands are D-Bus calls (`io.github.pomodoropet`,
 While a focus round is running, Pomodoro Pet asks Plasma to hold back other
 notifications, the same as the *Do not disturb* switch in the notification
 applet. Pausing, breaks and quitting end it, and Plasma also ends it if the app
-crashes, so it can't get stuck on. Turn it off with the checkbox in the popover
-or `"dnd_during_focus": false`.
+crashes, so it can't get stuck on. Turn it off in *Settings → Focus & breaks*
+or with `"dnd_during_focus": false`.
 
 ### Suspend, restarts and crashes
 
@@ -222,7 +223,8 @@ Wayland. GNOME and plain X11 have fallbacks.
   the shortcut. Set `"idle_auto_resume": true` to resume without asking.
 - **During breaks:** being away is the point, so nothing pauses.
 
-Turn it off with *Pause when I step away* in the popover.
+Turn it off, change the minutes or allow auto-resume in *Settings → Focus &
+breaks*.
 
 ### Flow mode (overtime)
 
@@ -232,8 +234,8 @@ Sometimes the timer goes off right as you're getting somewhere.
   notification has a **Keep going** button. Click it during the break that
   just started, and the break turns back into focus *overtime*, counted from
   the moment the round ended.
-- **Flow mode, always.** Set **When focus ends → Keep going (flow)** in the
-  popover (`"flow_mode": true`). A finished round counts as done right away,
+- **Flow mode, always.** Set *Settings → Timer → When a focus round ends →
+  Keep going (flow mode)* (`"flow_mode": true`). A finished round counts as done right away,
   the pup celebrates, and the timer keeps counting up instead of starting the
   break. The notification offers **Take break now**.
 
@@ -252,12 +254,12 @@ you get a soft single tone (with sound on), a line from the pup ("One minute
 left. Time to wrap up your thought 🐾") and a bubble outline that pulses until
 the end. It's deliberately quiet: no notification, so it doesn't break Do Not
 Disturb, and nothing at all if you're away from the computer. Toggle it with
-**1-minute warning** in the popover (`"minute_warning"`).
+*Settings → Timer → One-minute warning* (`"minute_warning"`).
 
 ### Break enforcement
 
-The **Breaks** setting in the popover decides how the pup handles you working
-through a break:
+*Settings → Focus & breaks → If I keep working during a break* decides how the
+pup handles you working through a break:
 
 - **Nudge me** (default): the first 20 seconds of a break are free. After
   that, 30 seconds of continuous keyboard/mouse use gets a wiggle and a
@@ -292,10 +294,32 @@ popover and the hover tooltip show the current mood and why. The mood is
 checked every 10 minutes too, so a new day or a long absence shows up without
 any action from you.
 
-## Configuration
+## Settings
 
-`~/.config/pomodoro-pet/config.json` (or `$XDG_CONFIG_HOME/pomodoro-pet/`) is
-written automatically. Keys:
+Click the pup, then **Settings** (or `pomodoro-pet --settings`, or *Settings*
+in the launcher's right-click menu). Changes apply as you make them, including
+the pup's size and custom sprites. The popover keeps only the quick controls:
+what you're working on, the four durations, Start/Skip/Reset, mood, Stats and
+Settings.
+
+![Settings window](docs/settings.png)
+
+| Tab | What's there |
+|---|---|
+| **Timer** | durations, rounds, flow mode, auto-start next phase, one-minute warning |
+| **Focus & breaks** | Do Not Disturb, pause when away (minutes, auto-resume), break enforcement |
+| **Pet** | name, size (50–300 %), custom sprite folder |
+| **Notifications & sound** | notifications, sounds, custom phase-end sound with a Test button |
+| **Advanced** | display backend and KWin integration (with **Restart now**), tray stub, open the settings/history folders |
+
+Only the display backend and KWin integration need a restart. The Advanced tab
+says so and offers **Restart now**, which starts a fresh instance and quits
+this one.
+
+### The config file
+
+Everything is stored in `~/.config/pomodoro-pet/config.json` (or
+`$XDG_CONFIG_HOME/pomodoro-pet/`). Out-of-range values are clamped. Keys:
 
 | Key | Default | Meaning |
 |---|---|---|
@@ -322,7 +346,8 @@ written automatically. Keys:
 | `kwin_integration` | `true` | use KWin scripting for keep-above/positioning on Wayland |
 | `minimize_to_tray` | `false` | **experimental stub**, see below |
 
-Edit it while the app is closed. The app rewrites it on quit.
+If you edit the file by hand, do it while the app is closed. The app rewrites
+it on quit. Otherwise just use the Settings window.
 
 ## Custom sprites
 
@@ -388,7 +413,8 @@ Other known quirks:
 
 ## "Minimize to tray" (experimental stub)
 
-Off by default. Set `"minimize_to_tray": true` and the popover gets a
+Off by default. Turn it on in *Settings → Advanced* (`"minimize_to_tray"`) and
+the popover gets a
 *Minimize to tray* button. It hides the pup and shows the live minutes in a
 system-tray icon (tooltip shows the full countdown). Clicking the tray icon
 brings the pup back. Not done yet: tray context menu, persisting tray mode,
@@ -410,7 +436,8 @@ pomodoro_pet/
   app.py        entry point, wiring, lifecycle
   timer.py      Pomodoro state machine (suspend-aware clock, away detection, save/restore)
   pet.py        the frameless pet window: painting, animation, drag/click
-  popover.py    settings + Start/Pause/Skip/Reset popover
+  popover.py    quick controls: intention, durations, Start/Pause/Skip/Reset
+  settings_window.py  the Settings window (live-applied)
   wayland.py    backend selection + KWin scripting integration
   remote.py     D-Bus service + client behind --toggle/--status and the shortcuts
   dnd.py        Plasma Do Not Disturb during focus rounds

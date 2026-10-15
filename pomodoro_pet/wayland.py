@@ -36,6 +36,11 @@ log = logging.getLogger(__name__)
 KWIN_PLUGIN = "pomodoro-pet-integration"
 
 
+# QT_QPA_PLATFORM as the user launched us, before choose_platform() sets it,
+# so a restart can pick the backend afresh.
+ORIGINAL_QT_QPA_PLATFORM = os.environ.get("QT_QPA_PLATFORM")
+
+
 def is_wayland_session() -> bool:
     return os.environ.get("XDG_SESSION_TYPE") == "wayland" or bool(os.environ.get("WAYLAND_DISPLAY"))
 
