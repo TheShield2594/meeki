@@ -1,0 +1,63 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Lint & tests (Ubuntu, PySide6 wheels)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: "3.12"
+      - name: System libraries for Qt offscreen + D-Bus tools for the end-to-end tests
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libegl1 libgl1 libxkbcommon0 libfontconfig1 libdbus-1-3 \
+            dbus libglib2.0-bin libnotify-bin gettext
+      - name: Python dependencies
+        run: pip install PySide6-Essentials pytest ruff
+      - name: Lint
+        run: ruff check .
+      - name: Translations compile
+        run: python tools/i18n.py check
+      - name: Tests
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: python -m pytest -q
+
+  arch-package:
+    name: Arch package (makepkg, system PySide6)
+    runs-on: ubuntu-latest
+    container: archlinux:base-devel
+    steps:
+      - name: Install dependencies
+        run: |
+          pacman -Syu --noconfirm --needed git python pyside6 python-build python-installer \
+            python-setuptools python-wheel python-pytest dbus glib2 libnotify gettext
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+      - name: makepkg (runs the test suite in check())
+        run: |
+          useradd -m builder
+          chown -R builder: "$GITHUB_WORKSPACE"
+          su builder -c "cd '$GITHUB_WORKSPACE/packaging/arch' && makepkg --noconfirm --cleanbuild"
+      - name: Install the package and smoke-test it
+        run: |
+          pacman -U --noconfirm packaging/arch/pomodoro-pet-*.pkg.tar.zst
+          pomodoro-pet --version
+          XDG_DATA_HOME=/tmp/data pomodoro-pet --stats
+      - name: AUR metadata is in sync
+        run: |
+          su builder -c "cd '$GITHUB_WORKSPACE/packaging/aur' && makepkg --printsrcinfo > /tmp/SRCINFO"
+          diff -u packaging/aur/.SRCINFO /tmp/SRCINFO

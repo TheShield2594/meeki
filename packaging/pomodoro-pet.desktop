@@ -1,0 +1,33 @@
+[Desktop Entry]
+Type=Application
+Name=Pomodoro Pet
+GenericName=Pomodoro Timer
+Comment=A fluffy Bichon x Biewer pup that keeps your Pomodoro timer
+Exec=pomodoro-pet
+Icon=pomodoro-pet
+Terminal=false
+Categories=Utility;Clock;
+Keywords=pomodoro;timer;focus;tomato;productivity;pet;dog;
+StartupNotify=false
+StartupWMClass=pomodoro-pet
+SingleMainWindow=true
+Actions=toggle;skip;reset;settings;
+# Installed into share/kglobalaccel/ too, which turns the actions below into
+# KDE global shortcuts (System Settings -> Keyboard -> Shortcuts -> Pomodoro Pet).
+
+[Desktop Action toggle]
+Name=Start / Pause Timer
+Exec=pomodoro-pet --toggle
+X-KDE-Shortcuts=Meta+Shift+P
+
+[Desktop Action skip]
+Name=Skip Current Phase
+Exec=pomodoro-pet --skip
+
+[Desktop Action reset]
+Name=Reset Session
+Exec=pomodoro-pet --reset
+
+[Desktop Action settings]
+Name=Settings
+Exec=pomodoro-pet --settings

@@ -1,0 +1,52 @@
+# Maintainer: Your Name <you@example.com>
+#
+# AUR package that builds the latest commit from GitHub. To publish:
+#   1. make the GitHub repository public (the AUR fetches the source)
+#   2. set your name above, then: makepkg --printsrcinfo > .SRCINFO
+#   3. push PKGBUILD + .SRCINFO to ssh://aur@aur.archlinux.org/pomodoro-pet-git.git
+pkgname=pomodoro-pet-git
+_name=pomodoro-pet
+pkgver=0.2.0
+pkgrel=1
+pkgdesc="A Pomodoro desktop pet (Bichon x Biewer Terrier pup) for KDE Plasma"
+arch=('any')
+url="https://github.com/TheShield2594/meeki"
+license=('MIT')
+depends=('python' 'pyside6')
+makedepends=('git' 'python-build' 'python-installer' 'python-setuptools' 'python-wheel')
+checkdepends=('python-pytest' 'dbus' 'glib2')
+optdepends=(
+  'libnotify: desktop notifications via notify-send'
+  'pipewire: phase-end sound via pw-play'
+  'libpulse: phase-end sound via paplay'
+  'xorg-xwayland: XWayland fallback on non-KDE Wayland sessions'
+  'kconfig: install-kwin-rule.sh helper'
+)
+provides=("$_name")
+conflicts=("$_name")
+source=("$_name::git+https://github.com/TheShield2594/meeki.git")
+sha256sums=('SKIP')
+
+pkgver() {
+  cd "$_name"
+  local version
+  version=$(sed -n 's/^version = "\(.*\)"/\1/p' pyproject.toml)
+  printf "%s.r%s.g%s" "$version" "$(git rev-list --count HEAD)" "$(git rev-parse --short=7 HEAD)"
+}
+
+build() {
+  cd "$_name"
+  python tools/i18n.py compile
+  python -m build --wheel --no-isolation
+}
+
+check() {
+  cd "$_name"
+  QT_QPA_PLATFORM=offscreen python -m pytest -q tests
+}
+
+package() {
+  cd "$_name"
+  python -m installer --destdir="$pkgdir" dist/*.whl
+  sh packaging/install-files.sh "$pkgdir"
+}

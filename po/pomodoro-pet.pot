@@ -1,0 +1,981 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) YEAR THE PACKAGE'S COPYRIGHT HOLDER
+# This file is distributed under the same license as the pomodoro-pet package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, YEAR.
+#
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: pomodoro-pet 0.2.0\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-10-15 17:08+0000\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language-Team: LANGUAGE <LL@li.org>\n"
+"Language: \n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=INTEGER; plural=EXPRESSION;\n"
+
+#: pomodoro_pet/app.py
+msgid "Okay, one more minute… 🐾"
+msgstr ""
+
+#: pomodoro_pet/app.py
+msgid "I missed you! 🥺"
+msgstr ""
+
+#: pomodoro_pet/app.py
+msgid "Session complete"
+msgstr ""
+
+#: pomodoro_pet/app.py
+#, python-brace-format
+msgid "Idle · {left}"
+msgstr ""
+
+#: pomodoro_pet/app.py pomodoro_pet/popover.py
+#, python-brace-format
+msgid " · round {round}/{rounds}"
+msgstr ""
+
+#: pomodoro_pet/app.py
+#, python-brace-format
+msgid " · +{time} overtime"
+msgstr ""
+
+#: pomodoro_pet/app.py
+#, python-brace-format
+msgid " · {time} left"
+msgstr ""
+
+#: pomodoro_pet/app.py pomodoro_pet/popover.py
+msgid " (paused)"
+msgstr ""
+
+#: pomodoro_pet/app.py
+msgid "Take break"
+msgstr ""
+
+#: pomodoro_pet/app.py
+msgid "Pause"
+msgstr ""
+
+#: pomodoro_pet/app.py
+msgid "Resume"
+msgstr ""
+
+#: pomodoro_pet/app.py
+msgid "Start"
+msgstr ""
+
+#: pomodoro_pet/app.py
+msgid "Keep going"
+msgstr ""
+
+#: pomodoro_pet/app.py
+msgid "Skip"
+msgstr ""
+
+#: pomodoro_pet/app.py
+msgid "Reset"
+msgstr ""
+
+#: pomodoro_pet/app.py
+msgid "Add 5 minutes"
+msgstr ""
+
+#: pomodoro_pet/app.py
+msgid "What are you focusing on…"
+msgstr ""
+
+#: pomodoro_pet/app.py
+msgid "Stats"
+msgstr ""
+
+#: pomodoro_pet/app.py
+msgid "Settings"
+msgstr ""
+
+#: pomodoro_pet/app.py
+msgid "Quit"
+msgstr ""
+
+#: pomodoro_pet/app.py pomodoro_pet/stats_window.py
+#, python-brace-format
+msgid "{name} is {mood} {emoji}"
+msgstr ""
+
+#: pomodoro_pet/app.py
+msgid "Okay… I feel better now 🥺💕"
+msgstr ""
+
+#: pomodoro_pet/app.py
+msgid "Hehe! Okay, back to work 🐾"
+msgstr ""
+
+#: pomodoro_pet/app.py
+msgid "Hmph… okay, that's nice 🥺"
+msgstr ""
+
+#: pomodoro_pet/app.py
+#, python-brace-format
+msgid "{n} round today! Good human 🐾"
+msgid_plural "{n} rounds today! Good human 🐾"
+msgstr[0] ""
+msgstr[1] ""
+
+#: pomodoro_pet/app.py
+msgid "Hey… breaks keep us sharp 😤"
+msgstr ""
+
+#: pomodoro_pet/app.py
+#, python-brace-format
+msgid "Great flow! {time} extra logged 🌊"
+msgstr ""
+
+#: pomodoro_pet/app.py
+msgid "Great flow! 🌊"
+msgstr ""
+
+#: pomodoro_pet/app.py
+msgid "Aww, we were on a roll…"
+msgstr ""
+
+#: pomodoro_pet/app.py pomodoro_pet/history.py
+#, python-brace-format
+msgid "{n} round"
+msgid_plural "{n} rounds"
+msgstr[0] ""
+msgstr[1] ""
+
+#: pomodoro_pet/app.py
+#, python-brace-format
+msgid "Today {rounds} · {time}"
+msgstr ""
+
+#: pomodoro_pet/app.py
+#, python-brace-format
+msgid " · 🔥 {n}-day streak"
+msgstr ""
+
+#: pomodoro_pet/app.py
+msgid "Welcome back! Picking up where we left off 🐾"
+msgstr ""
+
+#: pomodoro_pet/app.py
+#, python-brace-format
+msgid "Welcome back! I paused while you were away ({n} min) 🐾"
+msgstr ""
+
+#: pomodoro_pet/app.py
+msgid "Welcome back!"
+msgstr ""
+
+#: pomodoro_pet/app.py
+#, python-brace-format
+msgid "{name} paused your focus round while you were away for {n} min."
+msgstr ""
+
+#: pomodoro_pet/app.py
+msgid "I was working, count it"
+msgstr ""
+
+#: pomodoro_pet/app.py
+msgid "It's break time!"
+msgstr ""
+
+#: pomodoro_pet/app.py
+#, python-brace-format
+msgid "{name} really wants you to step away from the computer."
+msgstr ""
+
+#: pomodoro_pet/app.py
+#, python-brace-format
+msgid "Welcome back! Focus round ended {n} min ago"
+msgstr ""
+
+#: pomodoro_pet/app.py
+#, python-brace-format
+msgid "Welcome back! Break ended {n} min ago"
+msgstr ""
+
+#: pomodoro_pet/app.py
+#, python-brace-format
+msgid ""
+"Paused at the start of the {phase}. Click the pup or press your shortcut to "
+"continue."
+msgstr ""
+
+#: pomodoro_pet/app.py
+msgid "All rounds done. Good dog, good human."
+msgstr ""
+
+#: pomodoro_pet/app.py
+msgid "Pomodoro session complete! 🎉"
+msgstr ""
+
+#: pomodoro_pet/app.py
+msgid "Break's over"
+msgstr ""
+
+#: pomodoro_pet/app.py
+#, python-brace-format
+msgid "Time to focus — round {round}/{rounds}."
+msgstr ""
+
+#: pomodoro_pet/app.py
+msgid "Focus round done!"
+msgstr ""
+
+#: pomodoro_pet/app.py
+#, python-brace-format
+msgid "Enjoy a {n}-minute long break."
+msgstr ""
+
+#: pomodoro_pet/app.py
+#, python-brace-format
+msgid "Take a {n}-minute break."
+msgstr ""
+
+#: pomodoro_pet/app.py
+#, python-brace-format
+msgid "Today: {n} round, {time}."
+msgid_plural "Today: {n} rounds, {time}."
+msgstr[0] ""
+msgstr[1] ""
+
+#: pomodoro_pet/app.py
+msgid "Click the pup to start."
+msgstr ""
+
+#: pomodoro_pet/app.py
+msgid "Or keep going if you're in the flow."
+msgstr ""
+
+#: pomodoro_pet/app.py
+msgid "Okay, keep going! I'll count your overtime 🌊"
+msgstr ""
+
+#: pomodoro_pet/app.py
+#, python-brace-format
+msgid ""
+"You're in the flow, so I'm counting your overtime. Take your {n}-minute "
+"break when you're ready."
+msgstr ""
+
+#: pomodoro_pet/app.py
+msgid "Focus round done! 🌊"
+msgstr ""
+
+#: pomodoro_pet/app.py
+msgid "Take break now"
+msgstr ""
+
+#: pomodoro_pet/app.py
+msgid "One minute left. Time to wrap up your thought 🐾"
+msgstr ""
+
+#: pomodoro_pet/app.py
+msgid "Break ends in a minute. Ready to dive back in? 🐾"
+msgstr ""
+
+#: pomodoro_pet/app.py
+msgid "A Pomodoro desktop pet (Bichon x Biewer pup)."
+msgstr ""
+
+#: pomodoro_pet/app.py
+msgid "start or pause the timer"
+msgstr ""
+
+#: pomodoro_pet/app.py
+msgid "start/resume the timer"
+msgstr ""
+
+#: pomodoro_pet/app.py
+msgid "end the current phase now"
+msgstr ""
+
+#: pomodoro_pet/app.py
+msgid "pause the timer"
+msgstr ""
+
+#: pomodoro_pet/app.py
+msgid "reset the session"
+msgstr ""
+
+#: pomodoro_pet/app.py
+msgid "show the pet"
+msgstr ""
+
+#: pomodoro_pet/app.py
+msgid "open the settings window"
+msgstr ""
+
+#: pomodoro_pet/app.py
+msgid "print the current phase and time left"
+msgstr ""
+
+#: pomodoro_pet/app.py
+msgid "set what you're focusing on (combine with --start)"
+msgstr ""
+
+#: pomodoro_pet/app.py
+msgid "print focus stats and the pup's mood, then exit"
+msgstr ""
+
+#: pomodoro_pet/app.py
+msgid "override the config's backend"
+msgstr ""
+
+#: pomodoro_pet/app.py
+msgid "forget the saved window position"
+msgstr ""
+
+#: pomodoro_pet/app.py
+msgid "Pomodoro Pet is not running"
+msgstr ""
+
+#: pomodoro_pet/behaviour.py
+msgid "*happy wiggles* 🐾"
+msgstr ""
+
+#: pomodoro_pet/behaviour.py
+msgid "Best human ever 💕"
+msgstr ""
+
+#: pomodoro_pet/behaviour.py
+msgid "More scritches please! 🥰"
+msgstr ""
+
+#: pomodoro_pet/behaviour.py
+msgid "Right behind the ears! 🐶"
+msgstr ""
+
+#: pomodoro_pet/break_overlay.py
+msgid "Stand up and stretch your back and shoulders."
+msgstr ""
+
+#: pomodoro_pet/break_overlay.py
+msgid "Look at something 20 feet away for 20 seconds."
+msgstr ""
+
+#: pomodoro_pet/break_overlay.py
+msgid "Get a glass of water."
+msgstr ""
+
+#: pomodoro_pet/break_overlay.py
+msgid "Roll your shoulders and unclench your jaw."
+msgstr ""
+
+#: pomodoro_pet/break_overlay.py
+msgid "Take five slow, deep breaths."
+msgstr ""
+
+#: pomodoro_pet/break_overlay.py
+#, python-brace-format
+msgid "Walk around for a minute. {name} approves."
+msgstr ""
+
+#: pomodoro_pet/break_overlay.py
+msgid "Rest your eyes. Close them for a bit."
+msgstr ""
+
+#: pomodoro_pet/break_overlay.py
+#, python-brace-format
+msgid "Break time with {name}"
+msgstr ""
+
+#: pomodoro_pet/break_overlay.py
+msgid "Snooze 1 min"
+msgstr ""
+
+#: pomodoro_pet/break_overlay.py
+msgid "Skip break"
+msgstr ""
+
+#: pomodoro_pet/break_overlay.py
+msgid "No snoozes left"
+msgstr ""
+
+#: pomodoro_pet/break_overlay.py
+#, python-brace-format
+msgid "Snooze 1 min ({left} left)"
+msgstr ""
+
+#: pomodoro_pet/dnd.py
+msgid "Focus round in progress"
+msgstr ""
+
+#: pomodoro_pet/history.py
+#, python-brace-format
+msgid "{m}m"
+msgstr ""
+
+#: pomodoro_pet/history.py
+#, python-brace-format
+msgid "{h}h {m:02d}m"
+msgstr ""
+
+#: pomodoro_pet/history.py
+msgid "content"
+msgstr ""
+
+#: pomodoro_pet/history.py
+msgid "happy"
+msgstr ""
+
+#: pomodoro_pet/history.py
+msgid "overjoyed"
+msgstr ""
+
+#: pomodoro_pet/history.py
+msgid "sad"
+msgstr ""
+
+#: pomodoro_pet/history.py
+msgid "sulky"
+msgstr ""
+
+#: pomodoro_pet/history.py
+#, python-brace-format
+msgid "skipped {n} break today"
+msgid_plural "skipped {n} breaks today"
+msgstr[0] ""
+msgstr[1] ""
+
+#: pomodoro_pet/history.py
+#, python-brace-format
+msgid "worked through {n} break today"
+msgid_plural "worked through {n} breaks today"
+msgstr[0] ""
+msgstr[1] ""
+
+#: pomodoro_pet/history.py
+#, python-brace-format
+msgid "hasn't seen you in {n} day"
+msgid_plural "hasn't seen you in {n} days"
+msgstr[0] ""
+msgstr[1] ""
+
+#: pomodoro_pet/history.py
+#, python-brace-format
+msgid "{n} unfinished round today"
+msgid_plural "{n} unfinished rounds today"
+msgstr[0] ""
+msgstr[1] ""
+
+#: pomodoro_pet/history.py
+#, python-brace-format
+msgid "{n} round done today"
+msgid_plural "{n} rounds done today"
+msgstr[0] ""
+msgstr[1] ""
+
+#: pomodoro_pet/history.py
+#, python-brace-format
+msgid "{n}-day streak"
+msgid_plural "{n}-day streak"
+msgstr[0] ""
+msgstr[1] ""
+
+#: pomodoro_pet/history.py
+#, python-brace-format
+msgid "got {n} pet today"
+msgid_plural "got {n} pets today"
+msgstr[0] ""
+msgstr[1] ""
+
+#: pomodoro_pet/history.py
+msgid "ready to work with you"
+msgstr ""
+
+#: pomodoro_pet/history.py
+msgid ", "
+msgstr ""
+
+#: pomodoro_pet/history.py pomodoro_pet/stats_window.py
+msgid "Today"
+msgstr ""
+
+#: pomodoro_pet/history.py
+#, python-brace-format
+msgid "{rounds} · {time} focused"
+msgstr ""
+
+#: pomodoro_pet/history.py pomodoro_pet/stats_window.py
+msgid "Streak"
+msgstr ""
+
+#: pomodoro_pet/history.py
+#, python-brace-format
+msgid "{n} day (best {best})"
+msgid_plural "{n} days (best {best})"
+msgstr[0] ""
+msgstr[1] ""
+
+#: pomodoro_pet/history.py pomodoro_pet/stats_window.py
+msgid "This week"
+msgstr ""
+
+#: pomodoro_pet/history.py pomodoro_pet/stats_window.py
+msgid "All time"
+msgstr ""
+
+#: pomodoro_pet/history.py
+#, python-brace-format
+msgid "{name} is {mood} {emoji} ({reason})"
+msgstr ""
+
+#: pomodoro_pet/history.py
+msgid "Last 7 days"
+msgstr ""
+
+#: pomodoro_pet/history.py pomodoro_pet/stats_window.py
+msgid "Top focus this week"
+msgstr ""
+
+#: pomodoro_pet/idle.py
+msgid "Psst… it's break time 🐾 Step away for a bit!"
+msgstr ""
+
+#: pomodoro_pet/idle.py
+msgid "Still working? Your break is ticking away ⏳"
+msgstr ""
+
+#: pomodoro_pet/idle.py
+msgid "Woof! Paws off the keyboard! 🐶"
+msgstr ""
+
+#: pomodoro_pet/pet.py pomodoro_pet/tray.py
+msgid "Done!"
+msgstr ""
+
+#: pomodoro_pet/popover.py
+msgid "What are you focusing on?"
+msgstr ""
+
+#: pomodoro_pet/popover.py
+msgid "Logged with each round. Press Enter to start focusing. (Alt+W)"
+msgstr ""
+
+#: pomodoro_pet/popover.py
+msgid "What are you focusing on"
+msgstr ""
+
+#: pomodoro_pet/popover.py pomodoro_pet/settings_window.py
+msgid " min"
+msgstr ""
+
+#: pomodoro_pet/popover.py
+msgid "&Focus"
+msgstr ""
+
+#: pomodoro_pet/popover.py
+msgid "&Long break"
+msgstr ""
+
+#: pomodoro_pet/popover.py
+msgid "Rou&nds"
+msgstr ""
+
+#: pomodoro_pet/popover.py
+msgid "S&hort break"
+msgstr ""
+
+#: pomodoro_pet/popover.py
+msgid "&Start"
+msgstr ""
+
+#: pomodoro_pet/popover.py
+msgid "&Reset"
+msgstr ""
+
+#: pomodoro_pet/popover.py
+msgid "S&kip"
+msgstr ""
+
+#: pomodoro_pet/popover.py
+msgid "S&tats"
+msgstr ""
+
+#: pomodoro_pet/popover.py
+msgid "Focus history, streaks and charts"
+msgstr ""
+
+#: pomodoro_pet/popover.py
+msgid "Settin&gs"
+msgstr ""
+
+#: pomodoro_pet/popover.py
+msgid "Breaks, idle detection, flow mode, sounds, the pup…"
+msgstr ""
+
+#: pomodoro_pet/popover.py
+msgid "Minimize to tray (experimental)"
+msgstr ""
+
+#: pomodoro_pet/popover.py
+msgid "Session complete! 🎉"
+msgstr ""
+
+#: pomodoro_pet/popover.py
+msgid "Ready when you are"
+msgstr ""
+
+#: pomodoro_pet/popover.py
+msgid " · overtime 🌊"
+msgstr ""
+
+#: pomodoro_pet/popover.py
+msgid "&Pause"
+msgstr ""
+
+#: pomodoro_pet/popover.py
+msgid "Res&ume"
+msgstr ""
+
+#: pomodoro_pet/popover.py
+msgid "Take &break"
+msgstr ""
+
+#: pomodoro_pet/popover.py
+msgid "End the current phase now"
+msgstr ""
+
+#: pomodoro_pet/settings_window.py
+msgid "Nudge me"
+msgstr ""
+
+#: pomodoro_pet/settings_window.py
+msgid ""
+"The pup wiggles and reminds you if you keep using the computer during a "
+"break."
+msgstr ""
+
+#: pomodoro_pet/settings_window.py
+msgid "A full-screen break reminder on every monitor, with snooze and skip."
+msgstr ""
+
+#: pomodoro_pet/settings_window.py
+msgid "Dim the screen"
+msgstr ""
+
+#: pomodoro_pet/settings_window.py
+msgid "Breaks are up to you."
+msgstr ""
+
+#: pomodoro_pet/settings_window.py
+msgid "Off"
+msgstr ""
+
+#: pomodoro_pet/settings_window.py
+msgid "Automatic (recommended)"
+msgstr ""
+
+#: pomodoro_pet/settings_window.py
+msgid "Native Wayland"
+msgstr ""
+
+#: pomodoro_pet/settings_window.py
+msgid "XWayland / X11"
+msgstr ""
+
+#: pomodoro_pet/settings_window.py
+msgid "Browse…"
+msgstr ""
+
+#: pomodoro_pet/settings_window.py
+msgid "Default"
+msgstr ""
+
+#: pomodoro_pet/settings_window.py
+msgid "Pomodoro Pet — Settings"
+msgstr ""
+
+#: pomodoro_pet/settings_window.py
+msgid "&Timer"
+msgstr ""
+
+#: pomodoro_pet/settings_window.py
+msgid "&Focus && breaks"
+msgstr ""
+
+#: pomodoro_pet/settings_window.py
+msgid "&Pet"
+msgstr ""
+
+#: pomodoro_pet/settings_window.py
+msgid "&Notifications && sound"
+msgstr ""
+
+#: pomodoro_pet/settings_window.py
+msgid "&Advanced"
+msgstr ""
+
+#: pomodoro_pet/settings_window.py
+msgid "&Close"
+msgstr ""
+
+#: pomodoro_pet/settings_window.py
+msgid "Changes apply right away."
+msgstr ""
+
+#: pomodoro_pet/settings_window.py pomodoro_pet/timer.py
+msgid "Focus"
+msgstr ""
+
+#: pomodoro_pet/settings_window.py pomodoro_pet/timer.py
+msgid "Short break"
+msgstr ""
+
+#: pomodoro_pet/settings_window.py pomodoro_pet/timer.py
+msgid "Long break"
+msgstr ""
+
+#: pomodoro_pet/settings_window.py
+msgid "Rounds before the long break"
+msgstr ""
+
+#: pomodoro_pet/settings_window.py
+msgid "Keep going (flow mode)"
+msgstr ""
+
+#: pomodoro_pet/settings_window.py
+msgid "Start my break"
+msgstr ""
+
+#: pomodoro_pet/settings_window.py
+msgid "When a focus round ends"
+msgstr ""
+
+#: pomodoro_pet/settings_window.py
+msgid ""
+"Flow mode: a finished round counts as done and the timer counts your "
+"overtime up until you click Take break. Without it, the round-done "
+"notification still has a Keep going button."
+msgstr ""
+
+#: pomodoro_pet/settings_window.py
+msgid "Start the next phase automatically"
+msgstr ""
+
+#: pomodoro_pet/settings_window.py
+msgid "Off: the timer waits for you at the start of each phase"
+msgstr ""
+
+#: pomodoro_pet/settings_window.py
+msgid "One-minute warning"
+msgstr ""
+
+#: pomodoro_pet/settings_window.py
+msgid ""
+"A soft tone, a word from the pup and a pulsing bubble a minute before the end"
+msgstr ""
+
+#: pomodoro_pet/settings_window.py
+msgid "Pause focus rounds when I step away"
+msgstr ""
+
+#: pomodoro_pet/settings_window.py
+msgid "Resume by myself when you're back (don't ask)"
+msgstr ""
+
+#: pomodoro_pet/settings_window.py
+msgid "Away after no keyboard/mouse input for"
+msgstr ""
+
+#: pomodoro_pet/settings_window.py
+msgid "If I keep working during a break"
+msgstr ""
+
+#: pomodoro_pet/settings_window.py
+msgid "Do Not Disturb while focusing"
+msgstr ""
+
+#: pomodoro_pet/settings_window.py
+msgid "Plasma holds back other notifications during focus rounds"
+msgstr ""
+
+#: pomodoro_pet/settings_window.py
+msgid ""
+"A locked screen counts as away straight away. Idle minutes never count as "
+"focus."
+msgstr ""
+
+#: pomodoro_pet/settings_window.py
+msgid "Bundled Bichon × Biewer pup"
+msgstr ""
+
+#: pomodoro_pet/settings_window.py
+msgid "Folder with your sprites"
+msgstr ""
+
+#: pomodoro_pet/settings_window.py
+msgid "Name"
+msgstr ""
+
+#: pomodoro_pet/settings_window.py
+msgid "Size"
+msgstr ""
+
+#: pomodoro_pet/settings_window.py
+msgid "Custom sprites"
+msgstr ""
+
+#: pomodoro_pet/settings_window.py
+msgid "Hide while a fullscreen app covers the pet"
+msgstr ""
+
+#: pomodoro_pet/settings_window.py
+msgid ""
+"Videos, games and presentations get the screen to themselves (KDE Plasma)"
+msgstr ""
+
+#: pomodoro_pet/settings_window.py
+msgid "Idle animations and naps"
+msgstr ""
+
+#: pomodoro_pet/settings_window.py
+msgid ""
+"When the timer isn't running the pup looks around, yawns, scratches and "
+"stretches, and naps after 5 quiet minutes"
+msgstr ""
+
+#: pomodoro_pet/settings_window.py
+msgid "Pet the pup by rubbing the pointer back and forth over it."
+msgstr ""
+
+#: pomodoro_pet/settings_window.py
+msgid ""
+"A sprite folder has one subfolder of PNG frames (or one sprite-sheet PNG) "
+"per state: idle, focusing, break, celebrating, and optionally sulky, petted, "
+"look, yawn, scratch and stretch. Missing states use the bundled pup."
+msgstr ""
+
+#: pomodoro_pet/settings_window.py
+msgid "Test"
+msgstr ""
+
+#: pomodoro_pet/settings_window.py
+msgid "Bundled chime"
+msgstr ""
+
+#: pomodoro_pet/settings_window.py
+msgid "Sound for the end of a phase"
+msgstr ""
+
+#: pomodoro_pet/settings_window.py
+msgid "Sounds"
+msgstr ""
+
+#: pomodoro_pet/settings_window.py
+msgid "Phase-end sound"
+msgstr ""
+
+#: pomodoro_pet/settings_window.py
+msgid "Show a notification when a phase ends"
+msgstr ""
+
+#: pomodoro_pet/settings_window.py
+msgid "Play sounds (phase end and one-minute warning)"
+msgstr ""
+
+#: pomodoro_pet/settings_window.py
+msgid "Display backend"
+msgstr ""
+
+#: pomodoro_pet/settings_window.py
+msgid "Use KWin to keep the pet on top and remember its position (Wayland)"
+msgstr ""
+
+#: pomodoro_pet/settings_window.py
+msgid "Restart Pomodoro Pet to apply this."
+msgstr ""
+
+#: pomodoro_pet/settings_window.py
+msgid "Restart now"
+msgstr ""
+
+#: pomodoro_pet/settings_window.py
+msgid "Open settings folder"
+msgstr ""
+
+#: pomodoro_pet/settings_window.py
+msgid "Open history folder"
+msgstr ""
+
+#: pomodoro_pet/settings_window.py
+msgid "Open hooks folder"
+msgstr ""
+
+#: pomodoro_pet/settings_window.py
+#, python-brace-format
+msgid ""
+"Running on: {platform}. Automatic uses native Wayland on KDE Plasma and "
+"XWayland on other Wayland desktops."
+msgstr ""
+
+#: pomodoro_pet/settings_window.py
+msgid "Show a “Minimize to tray” button (experimental)"
+msgstr ""
+
+#: pomodoro_pet/settings_window.py
+msgid "Run my hook scripts on timer events"
+msgstr ""
+
+#: pomodoro_pet/settings_window.py
+msgid ""
+"Executables in the hooks folder run on phase start/end, pause, resume, "
+"overtime, session complete, away and back. See README.txt there."
+msgstr ""
+
+#: pomodoro_pet/stats_window.py
+msgid "Minutes focused per day, last 7 days"
+msgstr ""
+
+#: pomodoro_pet/stats_window.py
+#, python-brace-format
+msgid "{time} focused"
+msgstr ""
+
+#: pomodoro_pet/stats_window.py
+msgid "Pomodoro Pet — Stats"
+msgstr ""
+
+#: pomodoro_pet/stats_window.py
+msgid "Focus time, last 7 days"
+msgstr ""
+
+#: pomodoro_pet/stats_window.py
+#, python-brace-format
+msgid "round · {time}"
+msgid_plural "rounds · {time}"
+msgstr[0] ""
+msgstr[1] ""
+
+#: pomodoro_pet/stats_window.py
+#, python-brace-format
+msgid "{n} day"
+msgid_plural "{n} days"
+msgstr[0] ""
+msgstr[1] ""
+
+#: pomodoro_pet/stats_window.py
+#, python-brace-format
+msgid "best {n}"
+msgstr ""
+
+#: pomodoro_pet/stats_window.py
+msgid "focused"
+msgstr ""
+
+#: pomodoro_pet/stats_window.py
+msgid "Type what you're working on in the popover and it shows up here."
+msgstr ""
+
+#: pomodoro_pet/tray.py
+#, python-brace-format
+msgid "Overtime: +{time}"
+msgstr ""
