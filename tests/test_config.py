@@ -33,3 +33,17 @@ def test_corrupt_file(tmp_path):
 def test_xdg_config_home(monkeypatch, tmp_path):
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
     assert config_path() == tmp_path / "pomodoro-pet" / "config.json"
+
+
+def test_session_file_roundtrip(tmp_path):
+    from pomodoro_pet.config import load_session, save_session
+
+    path = tmp_path / "state" / "session.json"
+    assert load_session(path) is None
+    save_session({"state": "running", "phase": "focus"}, path)
+    assert load_session(path) == {"state": "running", "phase": "focus"}
+    save_session(None, path)  # nothing to resume -> file removed
+    assert not path.exists()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("garbage")
+    assert load_session(path) is None

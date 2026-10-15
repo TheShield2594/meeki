@@ -21,6 +21,7 @@ DEFAULTS: dict[str, Any] = {
     "auto_advance": True,
     # Feedback
     "notifications": True,
+    "dnd_during_focus": True,  # Plasma "Do Not Disturb" while a focus round runs
     "sound": True,
     "sound_file": None,  # None -> bundled chime
     # Pet window
@@ -51,6 +52,48 @@ def config_dir() -> Path:
 
 def config_path() -> Path:
     return config_dir() / "config.json"
+
+
+def session_path() -> Path:
+    """The running session (phase, round, end time), so a restart can resume it."""
+    base = os.environ.get("XDG_STATE_HOME") or os.path.join(os.path.expanduser("~"), ".local", "state")
+    return Path(base) / APP_ID / "session.json"
+
+
+def _write_json_atomic(path: Path, data: Any) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    with open(tmp, "w", encoding="utf-8") as fh:
+        json.dump(data, fh, indent=2, sort_keys=True)
+        fh.write("\n")
+        fh.flush()
+        os.fsync(fh.fileno())
+    os.replace(tmp, path)
+
+
+def load_session(path: Path | None = None) -> dict | None:
+    path = path or session_path()
+    try:
+        with open(path, encoding="utf-8") as fh:
+            data = json.load(fh)
+        return data if isinstance(data, dict) else None
+    except FileNotFoundError:
+        return None
+    except (OSError, ValueError) as exc:
+        log.warning("Ignoring unreadable session file %s: %s", path, exc)
+        return None
+
+
+def save_session(data: dict | None, path: Path | None = None) -> None:
+    """Write the session, or delete the file when there's nothing to resume."""
+    path = path or session_path()
+    try:
+        if data is None:
+            path.unlink(missing_ok=True)
+        else:
+            _write_json_atomic(path, data)
+    except OSError as exc:
+        log.warning("Could not save session to %s: %s", path, exc)
 
 
 def _sanitize(data: dict[str, Any]) -> dict[str, Any]:
@@ -105,12 +148,7 @@ class Config:
 
     def save(self) -> None:
         try:
-            self.path.parent.mkdir(parents=True, exist_ok=True)
-            tmp = self.path.with_suffix(".json.tmp")
-            with open(tmp, "w", encoding="utf-8") as fh:
-                json.dump(self.data, fh, indent=2, sort_keys=True)
-                fh.write("\n")
-            os.replace(tmp, self.path)
+            _write_json_atomic(self.path, self.data)
         except OSError as exc:
             log.warning("Could not save config to %s: %s", self.path, exc)
 

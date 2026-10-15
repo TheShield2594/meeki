@@ -31,7 +31,7 @@ QPushButton#primary { font-weight: 600; }
 
 class Popover(QFrame):
     settings_changed = Signal(int, int, int, int)  # focus, short, long, rounds
-    toggles_changed = Signal(bool, bool)  # notifications, sound
+    toggles_changed = Signal(bool, bool, bool)  # notifications, sound, do-not-disturb
     minimize_requested = Signal()
 
     def __init__(self, timer: PomodoroTimer, parent: QWidget, show_minimize: bool = False):
@@ -65,6 +65,8 @@ class Popover(QFrame):
         checks.addWidget(self.notify_box)
         checks.addWidget(self.sound_box)
         checks.addStretch(1)
+        self.dnd_box = QCheckBox("Do Not Disturb while focusing")
+        self.dnd_box.setToolTip("Silence other notifications during focus rounds")
 
         self.start_btn = QPushButton("Start")
         self.start_btn.setObjectName("primary")
@@ -83,6 +85,7 @@ class Popover(QFrame):
         layout.addWidget(self.status)
         layout.addLayout(form)
         layout.addLayout(checks)
+        layout.addWidget(self.dnd_box)
         layout.addLayout(buttons)
 
         if show_minimize:
@@ -95,6 +98,7 @@ class Popover(QFrame):
             spin.valueChanged.connect(self._emit_settings)
         self.notify_box.toggled.connect(self._emit_toggles)
         self.sound_box.toggled.connect(self._emit_toggles)
+        self.dnd_box.toggled.connect(self._emit_toggles)
         self.start_btn.clicked.connect(timer.toggle)
         self.reset_btn.clicked.connect(timer.reset)
         self.skip_btn.clicked.connect(timer.skip)
@@ -110,8 +114,10 @@ class Popover(QFrame):
         spin.setAlignment(Qt.AlignRight)
         return spin
 
-    def load(self, focus: int, short: int, long: int, rounds: int, notifications: bool, sound: bool) -> None:
-        widgets = (self.focus, self.short, self.long, self.rounds, self.notify_box, self.sound_box)
+    def load(
+        self, focus: int, short: int, long: int, rounds: int, notifications: bool, sound: bool, dnd: bool
+    ) -> None:
+        widgets = (self.focus, self.short, self.long, self.rounds, self.notify_box, self.sound_box, self.dnd_box)
         for w in widgets:
             w.blockSignals(True)
         self.focus.setValue(focus)
@@ -120,6 +126,7 @@ class Popover(QFrame):
         self.rounds.setValue(rounds)
         self.notify_box.setChecked(notifications)
         self.sound_box.setChecked(sound)
+        self.dnd_box.setChecked(dnd)
         for w in widgets:
             w.blockSignals(False)
         self.refresh()
@@ -128,7 +135,7 @@ class Popover(QFrame):
         self.settings_changed.emit(self.focus.value(), self.short.value(), self.long.value(), self.rounds.value())
 
     def _emit_toggles(self) -> None:
-        self.toggles_changed.emit(self.notify_box.isChecked(), self.sound_box.isChecked())
+        self.toggles_changed.emit(self.notify_box.isChecked(), self.sound_box.isChecked(), self.dnd_box.isChecked())
 
     def refresh(self, *_args) -> None:
         t = self.timer

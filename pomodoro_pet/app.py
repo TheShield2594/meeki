@@ -4,25 +4,29 @@ from __future__ import annotations
 
 import argparse
 import logging
+import os
 import signal
 import sys
+import tempfile
 
 from . import __version__
-from .config import APP_ID, Config
+from .config import APP_ID, Config, load_session, save_session
+from .remote import COMMANDS, PetService, send_command
+from .timer import Phase, PomodoroTimer, State, format_mmss
 from .wayland import KWinIntegration, choose_platform
 
 log = logging.getLogger("pomodoro_pet")
 
 
 class Controller:
-    def __init__(self, app, cfg: Config):
+    def __init__(self, app, cfg: Config, autostart: bool = False):
         # Qt imports happen after choose_platform() has run.
         from PySide6.QtCore import QTimer
 
         from .assets import load_sprites
+        from .dnd import DoNotDisturb
         from .pet import WINDOW_TITLE, PetWindow
         from .popover import Popover
-        from .timer import PomodoroTimer
         from .wayland import running_on_wayland
 
         self.app = app
@@ -35,7 +39,7 @@ class Controller:
         self.popover = Popover(self.timer, self.pet, show_minimize=cfg["minimize_to_tray"])
         self.popover.load(
             cfg["focus_minutes"], cfg["short_break_minutes"], cfg["long_break_minutes"],
-            cfg["rounds"], cfg["notifications"], cfg["sound"],
+            cfg["rounds"], cfg["notifications"], cfg["sound"], cfg["dnd_during_focus"],
         )
         self.tray = None
 
@@ -47,6 +51,14 @@ class Controller:
         self.popover.minimize_requested.connect(self.minimize_to_tray)
         self.timer.phase_finished.connect(self._on_phase_finished)
         self.timer.session_complete.connect(lambda: self.pet.celebrate(12))
+        self.timer.state_changed.connect(self._on_timer_changed)
+        self.timer.phase_changed.connect(self._on_timer_changed)
+
+        self.dnd = DoNotDisturb()
+        self.service = PetService(self.status_text)
+        self.service.command.connect(self._on_command)
+        self.service.position_reported.connect(self._remember_position)
+        self.service.register()
 
         self._save_debounce = QTimer(singleShot=True, interval=1500)
         self._save_debounce.timeout.connect(self.cfg.save)
@@ -56,7 +68,6 @@ class Controller:
         if running_on_wayland():
             if cfg["kwin_integration"]:
                 self.kwin = KWinIntegration(APP_ID, WINDOW_TITLE)
-                self.kwin.position_reported.connect(self._remember_position)
             self.pet.show()
             if self.kwin is not None:
                 pos = (position["x"], position["y"]) if position else self._default_position()
@@ -71,6 +82,15 @@ class Controller:
             x, y = (position["x"], position["y"]) if position else self._default_position()
             self.pet.move(self._clamp_to_screens(x, y))
             self.pet.show()
+
+        # Pick up a session that was running when the app last quit (or crashed).
+        self._restoring = True
+        if self.timer.restore(load_session()):
+            log.info("Resumed session: %s", self.status_text())
+        self._restoring = False
+        if autostart and self.timer.state is not State.RUNNING:
+            self.timer.start()
+        self._on_timer_changed()
 
     # ---- positioning ---------------------------------------------------
     def _default_position(self) -> tuple[int, int]:
@@ -109,18 +129,63 @@ class Controller:
         self.pet.update()
         self._save_debounce.start()
 
-    def _on_toggles(self, notifications: bool, sound: bool) -> None:
+    def _on_toggles(self, notifications: bool, sound: bool, dnd: bool) -> None:
         self.cfg["notifications"], self.cfg["sound"] = notifications, sound
+        self.cfg["dnd_during_focus"] = dnd
+        self._update_dnd()
         self._save_debounce.start()
+
+    # ---- timer state ---------------------------------------------------
+    def _on_timer_changed(self, *_args) -> None:
+        self._update_dnd()
+        if not getattr(self, "_restoring", False):
+            save_session(self.timer.snapshot())
+
+    def _update_dnd(self) -> None:
+        t = self.timer
+        self.dnd.set_active(
+            self.cfg["dnd_during_focus"] and t.state is State.RUNNING and t.phase is Phase.FOCUS
+        )
+
+    def status_text(self) -> str:
+        t = self.timer
+        if t.state is State.COMPLETE:
+            return "Session complete"
+        left = format_mmss(t.remaining_seconds())
+        if t.state is State.IDLE:
+            return f"Idle · {left}"
+        text = t.phase.label
+        if t.phase is Phase.FOCUS:
+            text += f" · round {t.round}/{t.rounds}"
+        text += f" · {left} left"
+        return text + (" (paused)" if t.state is State.PAUSED else "")
+
+    def _on_command(self, command: str) -> None:
+        t = self.timer
+        actions = {"toggle": t.toggle, "start": t.start, "pause": t.pause, "skip": t.skip, "reset": t.reset}
+        if command in actions:
+            actions[command]()
+        elif command == "show":
+            if self.tray is not None:
+                self.tray.hide()
+            self.pet.show()
+            self.pet.raise_()
 
     # ---- phase events --------------------------------------------------
     def _on_phase_finished(self, finished, nxt) -> None:
         from .notify import notify, play_sound
-        from .timer import Phase
 
         if finished is Phase.FOCUS:
             self.pet.celebrate(4)
-        if nxt is None:
+            # Lift Do Not Disturb first, or our own "break time" notice gets swallowed.
+            self.dnd.set_active(False)
+        away = self.timer.away_seconds
+        if away and nxt is not None:
+            mins = max(1, round(away / 60))
+            what = "Focus round" if finished is Phase.FOCUS else "Break"
+            summary = f"Welcome back! {what} ended {mins} min ago"
+            body = f"Paused at the start of the {nxt.label.lower()}. Click the pup or press your shortcut to continue."
+        elif nxt is None:
             summary, body = "Pomodoro session complete! 🎉", "All rounds done. Good dog, good human."
         elif nxt is Phase.FOCUS:
             summary, body = "Break's over", f"Time to focus — round {self.timer.round + 1}/{self.timer.rounds}."
@@ -128,7 +193,7 @@ class Controller:
             summary, body = "Focus round done!", f"Enjoy a {self.timer.long_break_minutes}-minute long break."
         else:
             summary, body = "Focus round done!", f"Take a {self.timer.short_break_minutes}-minute break."
-        if not self.timer.auto_advance and nxt is not None:
+        if not self.timer.auto_advance and nxt is not None and not away:
             body += " Click the pup to start."
         if self.cfg["notifications"]:
             notify(summary, body)
@@ -159,12 +224,23 @@ class Controller:
         self._shut_down = True
         self._save_debounce.stop()
         self.cfg.save()
+        save_session(self.timer.snapshot())
+        self.dnd.set_active(False)
+        self.service.unregister()
         if self.kwin is not None:
             self.kwin.stop()
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog=APP_ID, description="A Pomodoro desktop pet (Bichon x Biewer pup).")
+    remote = parser.add_argument_group("control a running pet (or start one)")
+    for cmd in COMMANDS:
+        helps = {
+            "toggle": "start or pause the timer", "start": "start/resume the timer", "pause": "pause the timer",
+            "skip": "end the current phase now", "reset": "reset the session", "show": "show the pet",
+            "status": "print the current phase and time left",
+        }
+        remote.add_argument(f"--{cmd}", dest="command", action="store_const", const=cmd, help=helps[cmd])
     parser.add_argument("--backend", choices=("auto", "wayland", "xcb"), help="override the config's backend")
     parser.add_argument("--reset-position", action="store_true", help="forget the saved window position")
     parser.add_argument("-v", "--verbose", action="store_true")
@@ -173,24 +249,40 @@ def main(argv: list[str] | None = None) -> int:
 
     logging.basicConfig(level=logging.DEBUG if args.verbose else logging.INFO, format="%(name)s: %(message)s")
 
+    # One pet at a time. If one is already running, this invocation is a remote
+    # control: pass the command (or "show") to it over D-Bus and exit.
+    from PySide6.QtCore import QLockFile
+
+    runtime_dir = os.environ.get("XDG_RUNTIME_DIR") or tempfile.gettempdir()
+    lock = QLockFile(os.path.join(runtime_dir, f"{APP_ID}.lock"))
+    lock.setStaleLockTime(0)
+    if not lock.tryLock(100):
+        from PySide6.QtCore import QCoreApplication
+
+        _core = QCoreApplication(sys.argv[:1])  # noqa: F841 (needed for D-Bus)
+        command = args.command or "show"
+        ok, reply = send_command(command)
+        if not ok:
+            log.error("Pomodoro Pet seems to be running but didn't answer: %s", reply)
+            return 1
+        if command == "status":
+            print(reply)
+        elif not args.command:
+            log.info("Pomodoro Pet is already running")
+        return 0
+    if args.command in ("status", "pause", "skip", "reset"):
+        print("Pomodoro Pet is not running")
+        return 1
+
     cfg = Config().load()
     if args.reset_position:
         cfg["position"] = None
     choose_platform(args.backend or cfg["backend"])
 
-    from PySide6.QtCore import QDir, QLockFile, QStandardPaths
     from PySide6.QtGui import QGuiApplication, QIcon
     from PySide6.QtWidgets import QApplication
 
     from .assets import asset
-
-    # One pet at a time: launching again from the menu shouldn't spawn a twin.
-    runtime_dir = QStandardPaths.writableLocation(QStandardPaths.RuntimeLocation) or QDir.tempPath()
-    lock = QLockFile(f"{runtime_dir}/{APP_ID}.lock")
-    lock.setStaleLockTime(0)
-    if not lock.tryLock(100):
-        log.error("Pomodoro Pet is already running")
-        return 1
 
     QGuiApplication.setDesktopFileName(APP_ID)  # Wayland app_id -> matches the .desktop file
     app = QApplication(sys.argv[:1])
@@ -204,7 +296,7 @@ def main(argv: list[str] | None = None) -> int:
     app.setWindowIcon(icon)
     log.info("Qt platform: %s", app.platformName())
 
-    controller = Controller(app, cfg)
+    controller = Controller(app, cfg, autostart=args.command in ("start", "toggle"))
 
     # Save and clean up on Ctrl+C / SIGTERM too. A no-op timer lets Python
     # handle signals while Qt's event loop is running.

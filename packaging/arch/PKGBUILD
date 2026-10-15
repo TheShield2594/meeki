@@ -49,6 +49,9 @@ package() {
   install -d "$pkgdir/usr/share/$pkgname"
   cp -r assets "$pkgdir/usr/share/$pkgname/"
   install -Dm644 packaging/pomodoro-pet.desktop "$pkgdir/usr/share/applications/$pkgname.desktop"
+  # same file in kglobalaccel/ registers the KDE global shortcuts (Meta+Shift+P etc.)
+  install -d "$pkgdir/usr/share/kglobalaccel"
+  ln -s "../applications/$pkgname.desktop" "$pkgdir/usr/share/kglobalaccel/$pkgname.desktop"
   for s in 48 64 128 256; do
     install -Dm644 "assets/icons/pomodoro-pet-$s.png" \
       "$pkgdir/usr/share/icons/hicolor/${s}x${s}/apps/$pkgname.png"

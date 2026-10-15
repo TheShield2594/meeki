@@ -24,14 +24,13 @@ import os
 import tempfile
 from pathlib import Path
 
-from PySide6.QtCore import ClassInfo, QObject, Signal, Slot
+from PySide6.QtCore import QObject
 from PySide6.QtGui import QGuiApplication
+
+from .remote import DBUS_IFACE, DBUS_PATH, DBUS_SERVICE
 
 log = logging.getLogger(__name__)
 
-DBUS_SERVICE = "io.github.pomodoropet"
-DBUS_PATH = "/PomodoroPet"
-DBUS_IFACE = "io.github.pomodoropet.Pet"
 KWIN_PLUGIN = "pomodoro-pet-integration"
 
 
@@ -111,24 +110,10 @@ _KWIN_SCRIPT = r"""
 """
 
 
-@ClassInfo({"D-Bus Interface": DBUS_IFACE})
-class _PositionReceiver(QObject):
-    position_reported = Signal(int, int)
-
-    @Slot(str)
-    def reportPosition(self, xy: str) -> None:  # noqa: N802 (D-Bus method name)
-        try:
-            x, y = (int(float(v)) for v in xy.split(","))
-        except ValueError:
-            return
-        self.position_reported.emit(x, y)
-
-
 class KWinIntegration(QObject):
     """Loads a small KWin script that manages our window. Fails soft: if
-    anything is missing, available() is False and callers fall back."""
-
-    position_reported = Signal(int, int)
+    anything is missing, available() is False and callers fall back.
+    Position reports arrive through remote.PetService.reportPosition."""
 
     def __init__(self, app_id: str, caption: str, parent: QObject | None = None):
         super().__init__(parent)
@@ -137,8 +122,6 @@ class KWinIntegration(QObject):
         self._bus = None
         self._script_file: Path | None = None
         self._loaded = False
-        self._receiver = _PositionReceiver(self)
-        self._receiver.position_reported.connect(self.position_reported)
         try:
             from PySide6.QtDBus import QDBusConnection, QDBusInterface
 
@@ -163,14 +146,6 @@ class KWinIntegration(QObject):
         if scripting is None:
             log.warning("KWin scripting D-Bus interface not reachable")
             return False
-
-        from PySide6.QtDBus import QDBusConnection
-
-        # Our end of the position callback. Another instance may own the name;
-        # that's fine, we just won't get position reports.
-        if not self._bus.registerService(DBUS_SERVICE):
-            log.warning("D-Bus name %s already taken (another instance running?)", DBUS_SERVICE)
-        self._bus.registerObject(DBUS_PATH, self._receiver, QDBusConnection.ExportAllSlots)
 
         cfg = {
             "appId": self.app_id,
@@ -216,9 +191,6 @@ class KWinIntegration(QObject):
             if scripting is not None:
                 scripting.call("unloadScript", KWIN_PLUGIN)
             self._loaded = False
-        if self._bus is not None:
-            self._bus.unregisterObject(DBUS_PATH)
-            self._bus.unregisterService(DBUS_SERVICE)
         self._cleanup_file()
 
     def _cleanup_file(self) -> None:

@@ -1,7 +1,13 @@
 """Pomodoro state machine.
 
-The timer is deadline based (monotonic clock), so it doesn't drift if ticks are
-late, e.g. while the system is busy. The clock is injectable for tests.
+The timer is deadline based, so it doesn't drift if ticks are late. The
+default clock is CLOCK_BOOTTIME, which (unlike time.monotonic) keeps counting
+while the machine is suspended: close the lid for an hour and the round has
+really ended when you come back. The clock is injectable for tests.
+
+If a phase ended long before we noticed (suspend, app closed), the timer does
+not silently roll into the next phase; it stops at the start of it and reports
+how long you were away (`away_seconds`).
 """
 
 from __future__ import annotations
@@ -12,6 +18,23 @@ import time
 from collections.abc import Callable
 
 from PySide6.QtCore import QObject, QTimer, Signal
+
+# A phase that ended more than this many seconds before we noticed counts as
+# "you were away" (suspend, app not running).
+AWAY_THRESHOLD = 60.0
+# Saved sessions older than this are dropped instead of restored.
+MAX_RESTORE_AGE = 12 * 3600
+
+
+def _default_clock() -> Callable[[], float]:
+    boottime = getattr(time, "CLOCK_BOOTTIME", None)
+    if boottime is not None:
+        try:
+            time.clock_gettime(boottime)
+            return lambda: time.clock_gettime(boottime)
+        except OSError:
+            pass
+    return time.monotonic
 
 
 class Phase(enum.Enum):
@@ -49,11 +72,11 @@ class PomodoroTimer(QObject):
         long_break_minutes: int = 15,
         rounds: int = 4,
         auto_advance: bool = True,
-        clock: Callable[[], float] = time.monotonic,
+        clock: Callable[[], float] | None = None,
         parent: QObject | None = None,
     ):
         super().__init__(parent)
-        self._clock = clock
+        self._clock = clock or _default_clock()
         self.focus_minutes = focus_minutes
         self.short_break_minutes = short_break_minutes
         self.long_break_minutes = long_break_minutes
@@ -66,6 +89,7 @@ class PomodoroTimer(QObject):
         self._deadline: float | None = None  # set while RUNNING
         self._remaining = self.duration(Phase.FOCUS)  # seconds, authoritative while not RUNNING
         self._last_emitted: int | None = None
+        self.away_seconds = 0.0  # set when the last phase ended while we weren't looking
 
         self._qtimer = QTimer(self)
         self._qtimer.setInterval(200)
@@ -174,6 +198,10 @@ class PomodoroTimer(QObject):
         return None  # long break ends the session
 
     def _finish_phase(self) -> None:
+        overshoot = 0.0
+        if self.state is State.RUNNING and self._deadline is not None:
+            overshoot = self._clock() - self._deadline
+        self.away_seconds = overshoot if overshoot > AWAY_THRESHOLD else 0.0
         finished = self.phase
         nxt = self._next_phase()
         self.phase_finished.emit(finished, nxt)
@@ -193,13 +221,69 @@ class PomodoroTimer(QObject):
         self._remaining = self.duration(nxt)
         self.phase_changed.emit(nxt)
 
-        if self.auto_advance and self.state is State.RUNNING:
+        if self.auto_advance and self.state is State.RUNNING and not self.away_seconds:
             self._deadline = self._clock() + self._remaining
         else:
             self._qtimer.stop()
             self._deadline = None
             self._set_state(State.PAUSED)
         self._emit_tick(force=True)
+
+
+    # ---- persistence -----------------------------------------------------
+    def snapshot(self, wall: float | None = None) -> dict | None:
+        """Serializable session state, or None if there's nothing worth keeping.
+        Uses wall-clock time for the end, since the monotonic/boot clocks reset
+        on reboot."""
+        if self.state in (State.IDLE, State.COMPLETE):
+            return None
+        wall = time.time() if wall is None else wall
+        data = {
+            "state": self.state.value,
+            "phase": self.phase.value,
+            "round": self.round,
+            "remaining": round(self.remaining(), 3),
+            "saved_at": wall,
+        }
+        if self.state is State.RUNNING:
+            data["ends_at"] = wall + self.remaining()
+        return data
+
+    def restore(self, data: dict | None, wall: float | None = None) -> bool:
+        """Continue a saved session. A running phase whose end passed while the
+        app was closed finishes now (phase_finished fires, away_seconds set)
+        and the timer waits at the start of the next phase."""
+        if not data:
+            return False
+        wall = time.time() if wall is None else wall
+        try:
+            state = State(data["state"])
+            phase = Phase(data["phase"])
+            rnd = max(1, min(int(data["round"]), self.rounds))
+            remaining = max(0.0, float(data["remaining"]))
+            saved_at = float(data["saved_at"])
+            ends_at = float(data["ends_at"]) if state is State.RUNNING else None
+        except (KeyError, TypeError, ValueError):
+            return False
+        if state not in (State.RUNNING, State.PAUSED) or wall - saved_at > MAX_RESTORE_AGE:
+            return False
+
+        self._qtimer.stop()
+        self.phase, self.round = phase, rnd
+        self.phase_changed.emit(phase)
+        if state is State.PAUSED:
+            self._deadline = None
+            self._remaining = min(remaining, self.duration(phase))
+            self._set_state(State.PAUSED)
+            self._emit_tick(force=True)
+            return True
+
+        self._deadline = self._clock() + (ends_at - wall)
+        self._set_state(State.RUNNING)
+        self._qtimer.start()
+        self.update()
+        self._emit_tick(force=True)
+        return True
 
 
 def format_mmss(seconds: int) -> str:
