@@ -1,0 +1,59 @@
+# Maintainer: Your Name <you@example.com>
+#
+# Builds from this source checkout:
+#   cd packaging/arch && makepkg -si
+pkgname=pomodoro-pet
+pkgver=0.1.0
+pkgrel=1
+pkgdesc="A Pomodoro desktop pet (Bichon x Biewer Terrier pup) for KDE Plasma"
+arch=('any')
+url="https://github.com/TheShield2594/meeki"
+license=('MIT')
+depends=('python' 'pyside6')
+makedepends=('python-build' 'python-installer' 'python-setuptools' 'python-wheel')
+checkdepends=('python-pytest')
+optdepends=(
+  'libnotify: desktop notifications via notify-send'
+  'pipewire: phase-end sound via pw-play'
+  'libpulse: phase-end sound via paplay'
+  'xorg-xwayland: XWayland fallback on non-KDE Wayland sessions'
+  'kconfig: install-kwin-rule.sh helper'
+)
+source=()
+sha256sums=()
+
+_srcroot() { realpath "$startdir/../.."; }
+
+prepare() {
+  rm -rf "$srcdir/$pkgname"
+  mkdir -p "$srcdir/$pkgname"
+  local root
+  root=$(_srcroot)
+  cp -a "$root"/{pyproject.toml,README.md,LICENSE,pomodoro_pet,assets,packaging,tests} "$srcdir/$pkgname/"
+}
+
+build() {
+  cd "$srcdir/$pkgname"
+  python -m build --wheel --no-isolation
+}
+
+check() {
+  cd "$srcdir/$pkgname"
+  QT_QPA_PLATFORM=offscreen python -m pytest -q tests
+}
+
+package() {
+  cd "$srcdir/$pkgname"
+  python -m installer --destdir="$pkgdir" dist/*.whl
+
+  install -d "$pkgdir/usr/share/$pkgname"
+  cp -r assets "$pkgdir/usr/share/$pkgname/"
+  install -Dm644 packaging/pomodoro-pet.desktop "$pkgdir/usr/share/applications/$pkgname.desktop"
+  for s in 48 64 128 256; do
+    install -Dm644 "assets/icons/pomodoro-pet-$s.png" \
+      "$pkgdir/usr/share/icons/hicolor/${s}x${s}/apps/$pkgname.png"
+  done
+  install -Dm644 packaging/kwin/pomodoro-pet.kwinrule "$pkgdir/usr/share/$pkgname/kwin/pomodoro-pet.kwinrule"
+  install -Dm755 packaging/kwin/install-kwin-rule.sh "$pkgdir/usr/share/$pkgname/kwin/install-kwin-rule.sh"
+  install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+}

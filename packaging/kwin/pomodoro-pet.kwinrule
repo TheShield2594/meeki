@@ -1,0 +1,24 @@
+# KWin window rule for Pomodoro Pet.
+# Only needed if the built-in KWin integration is off ("kwin_integration": false)
+# or doesn't work on your Plasma version.
+#
+# Import: System Settings -> Window Management -> Window Rules -> Import...
+# or run packaging/kwin/install-kwin-rule.sh
+#
+# Rule values: 2 = Force, 4 = Remember. Match: 1 = exact.
+[pomodoro-pet]
+Description=Pomodoro Pet (keep above, no taskbar, remember position)
+wmclass=pomodoro-pet
+wmclasscomplete=false
+wmclassmatch=1
+title=Pomodoro Pet
+titlematch=1
+above=true
+aboverule=2
+skiptaskbar=true
+skiptaskbarrule=2
+skippager=true
+skippagerrule=2
+skipswitcher=true
+skipswitcherrule=2
+positionrule=4
