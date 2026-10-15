@@ -5,6 +5,7 @@ display backend needs a restart, which the Advanced tab offers to do."""
 from __future__ import annotations
 
 import os
+import sys
 
 from PySide6.QtCore import Qt, QUrl, Signal
 from PySide6.QtGui import QDesktopServices, QKeySequence, QShortcut
@@ -292,11 +293,18 @@ class SettingsWindow(QWidget):
         files.addWidget(open_data)
         files.addWidget(open_hooks)
         files.addStretch(1)
+        display = QWidget()  # Linux only: the display backend and KWin
+        display_lay = QVBoxLayout(display)
+        display_lay.setContentsMargins(0, 0, 0, 0)
+        display_lay.addLayout(form)
+        display_lay.addWidget(_hint(_("Running on: {platform}. Automatic uses native Wayland on KDE Plasma and "
+                                      "XWayland on other Wayland desktops.").format(platform=platform_name)))
+        display_lay.addWidget(kwin)
+        display_lay.addLayout(restart_row)
+        if not sys.platform.startswith("linux"):
+            display.hide()
         return _page(
-            form,
-            _hint(_("Running on: {platform}. Automatic uses native Wayland on KDE Plasma and "
-                    "XWayland on other Wayland desktops.").format(platform=platform_name)),
-            kwin, restart_row,
+            display,
             self._check("minimize_to_tray", _("Show a “Minimize to tray” button (experimental)")),
             self._check("hooks_enabled", _("Run my hook scripts on timer events"),
                         _("Executables in the hooks folder run on phase start/end, pause, resume, overtime, "

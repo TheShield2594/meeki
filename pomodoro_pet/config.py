@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -63,6 +64,12 @@ BREAK_MODES = ("off", "nudge", "overlay")
 def config_dir() -> Path:
     base = os.environ.get("XDG_CONFIG_HOME") or os.path.join(os.path.expanduser("~"), ".config")
     return Path(base) / APP_ID
+
+
+def runtime_dir() -> str:
+    """Where the single-instance lock and the remote-control socket live
+    ($XDG_RUNTIME_DIR on Linux, the per-user temp dir on macOS)."""
+    return os.environ.get("XDG_RUNTIME_DIR") or tempfile.gettempdir()
 
 
 def config_path() -> Path:

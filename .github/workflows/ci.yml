@@ -61,3 +61,39 @@ jobs:
         run: |
           su builder -c "cd '$GITHUB_WORKSPACE/packaging/aur' && makepkg --printsrcinfo > /tmp/SRCINFO"
           diff -u packaging/aur/.SRCINFO /tmp/SRCINFO
+
+  macos-app:
+    name: macOS app (${{ matrix.arch }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            arch: arm64
+          - runner: macos-15-intel
+            arch: x86_64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: "3.12"
+      - name: Python dependencies
+        run: pip install PySide6-Essentials pytest pyinstaller pillow
+      - name: Tests
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: python -m pytest -q
+      - name: Build the app and .dmg
+        run: sh packaging/macos/build-app.sh
+      - name: Smoke-test the app
+        run: |
+          "dist/Pomodoro Pet.app/Contents/MacOS/pomodoro-pet" --version
+          XDG_DATA_HOME="$RUNNER_TEMP/data" "dist/Pomodoro Pet.app/Contents/MacOS/pomodoro-pet" --stats
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: pomodoro-pet-macos-${{ matrix.arch }}
+          path: dist/*.dmg
+          if-no-files-found: error

@@ -115,6 +115,47 @@ This installs:
 Optional dependencies: `libnotify` (notifications), `pipewire` or `libpulse`
 (sound), `xorg-xwayland` (XWayland fallback), `kconfig` (rule installer).
 
+## macOS
+
+There's a macOS build too: a self-contained `Pomodoro Pet.app` in a `.dmg`,
+for Apple silicon (`arm64`) and Intel (`x86_64`), macOS 12 or newer.
+
+**Get it:** every CI run on GitHub builds both. Open the run under *Actions*
+and download `pomodoro-pet-macos-arm64` or `pomodoro-pet-macos-x86_64` from
+its artifacts. Open the `.dmg` and drag the app to *Applications*.
+
+The app isn't signed with an Apple Developer ID, so the first launch is
+blocked. Either right-click the app and choose **Open**, or allow it in
+*System Settings → Privacy & Security → Open Anyway*, or run:
+
+```bash
+xattr -dr com.apple.quarantine "/Applications/Pomodoro Pet.app"
+```
+
+**Build it yourself** (on a Mac):
+
+```bash
+python3 -m pip install PySide6-Essentials pyinstaller pillow
+sh packaging/macos/build-app.sh   # -> dist/Pomodoro Pet.app and dist/Pomodoro-Pet-<version>-macos-<arch>.dmg
+```
+
+Or just run it from source with `pip install PySide6 && python3 -m pomodoro_pet`.
+
+**What's different on macOS:**
+
+| Feature | On macOS |
+|---|---|
+| Pet window, popover, stats, settings, mood, petting, break overlay | same as on Linux. The pet has no Dock icon; quit with the **×** or the right-click menu |
+| Notifications | Notification Center (via `osascript`, so macOS may list them under *Script Editor* the first time). No **Resume** / **Keep going** buttons: use the pup or the popover instead |
+| Sound | `afplay` |
+| Idle detection and screen lock | Quartz (CoreGraphics). No permission prompt needed |
+| Remote control (`--toggle`, `--status`, …) | a local socket instead of D-Bus. Run the app binary: `"/Applications/Pomodoro Pet.app/Contents/MacOS/pomodoro-pet" --status` |
+| Global shortcut | not built in. Bind the `--toggle` command above with Shortcuts, Raycast, Alfred, Hammerspoon or similar |
+| Do Not Disturb during focus | not available (macOS has no API for apps to turn on Focus) |
+| Hide in fullscreen, every desktop (Space) | not available (KWin only) |
+| Display backend / KWin settings | hidden |
+| Files | the same `~/.config`, `~/.local/state` and `~/.local/share` paths as on Linux |
+
 ## Using it
 
 | Action | How |
@@ -536,6 +577,9 @@ python tools/generate_assets.py   # regenerate placeholder sprites/icon/chime
   `check()` runs the tests against Arch's system PySide6), installs it,
   smoke-tests `pomodoro-pet --version` and `--stats`, and makes sure
   `packaging/aur/.SRCINFO` matches the AUR PKGBUILD.
+- **macOS jobs (arm64 and x86_64):** run the tests, build `Pomodoro Pet.app`
+  and the `.dmg` with PyInstaller (`packaging/macos/build-app.sh`), smoke-test
+  the app binary and upload the `.dmg` as an artifact.
 
 **AUR:** `packaging/aur/` has a `pomodoro-pet-git` PKGBUILD that builds the
 latest commit from GitHub, plus its `.SRCINFO`. To publish:
@@ -558,14 +602,14 @@ pomodoro_pet/
   popover.py    quick controls: intention, durations, Start/Pause/Skip/Reset
   settings_window.py  the Settings window (live-applied)
   wayland.py    backend selection + KWin scripting integration
-  remote.py     D-Bus service + client behind --toggle/--status and the shortcuts
+  remote.py     D-Bus service (local socket on macOS) + client behind --toggle/--status and the shortcuts
   dnd.py        Plasma Do Not Disturb during focus rounds
   history.py    history log, stats, streaks and the pup's mood (pure functions)
   behaviour.py  petting (rub) detection and idle-animation/nap scheduling
   idle.py       idle-time sources, away/back detection, break coaching
   break_overlay.py  full-screen "dim the screen" break reminder
   stats_window.py  stats window with the 7-day chart
-  notify.py     notify-send / gdbus / kdialog + pw-play / paplay / aplay
+  notify.py     notify-send / gdbus / kdialog + pw-play / paplay / aplay (osascript + afplay on macOS)
   assets.py     asset lookup and sprite loading (folders or sheets)
   config.py     ~/.config/pomodoro-pet/config.json
   tray.py       experimental tray stub
@@ -574,7 +618,8 @@ pomodoro_pet/
   i18n.py       gettext setup
 assets/         sprites, icon, chime
 po/             translation template (pomodoro-pet.pot) and translations
-packaging/      .desktop, Arch + AUR PKGBUILDs, install-files.sh, KWin rule, user install script
+packaging/      .desktop, Arch + AUR PKGBUILDs, install-files.sh, KWin rule, user install script,
+                macos/ (PyInstaller spec + .app/.dmg build script)
 tools/          asset generator, i18n tool (extract / compile / check)
 .github/        CI workflow
 tests/          unit tests + an end-to-end D-Bus test (private bus, fake notification server)

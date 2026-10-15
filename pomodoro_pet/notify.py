@@ -6,6 +6,10 @@ of them as regular KDE notifications.
 
 Sound is played with whatever PipeWire/Pulse/ALSA player exists
 (`pw-play`, `paplay`, `aplay`). All commands are fire-and-forget.
+
+On macOS notifications go through `osascript` (Notification Center) and sound
+through `afplay`. Notification buttons aren't available there, so those fall
+back to plain notifications.
 """
 
 from __future__ import annotations
@@ -13,6 +17,7 @@ from __future__ import annotations
 import logging
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 from PySide6.QtWidgets import QApplication
@@ -44,7 +49,21 @@ def _gvariant_str(s: str) -> str:
     return "'" + s.replace("\\", "\\\\").replace("'", "\\'") + "'"
 
 
+def _mac_notify(summary: str, body: str) -> bool:
+    # Texts go in as arguments, so nothing needs AppleScript quoting.
+    return _spawn([
+        "osascript",
+        "-e", "on run argv",
+        "-e", "display notification (item 3 of argv) with title (item 1 of argv) subtitle (item 2 of argv)",
+        "-e", "end run",
+        APP_NAME, summary, body,
+    ])
+
+
 def notify(summary: str, body: str = "", icon: str = APP_ID) -> None:
+    if sys.platform == "darwin" and shutil.which("osascript"):
+        if _mac_notify(summary, body):
+            return
     if shutil.which("notify-send"):
         if _spawn([
             "notify-send",
@@ -77,7 +96,7 @@ def notify(summary: str, body: str = "", icon: str = APP_ID) -> None:
 def play_sound(sound_file: str | None = None) -> None:
     path: Path | None = Path(sound_file).expanduser() if sound_file else asset("sounds", "chime.wav")
     if path is not None and path.is_file():
-        for player in ("pw-play", "paplay", "aplay"):
+        for player in ("pw-play", "paplay", "aplay", "afplay"):
             if shutil.which(player):
                 argv = [player, "-q", str(path)] if player == "aplay" else [player, str(path)]
                 if _spawn(argv):
