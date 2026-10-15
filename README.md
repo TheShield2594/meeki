@@ -129,6 +129,9 @@ Optional dependencies: `libnotify` (notifications), `pipewire` or `libpulse`
 | Change settings | **Settings** button in the popover, the launcher's right-click menu, or `pomodoro-pet --settings` |
 | Check status and mood | hover the pup |
 | Pet the pup | rub the pointer back and forth over it (no click) |
+| Add or remove a minute | scroll on the bubble (while idle: changes the focus length) |
+| Quick menu | right-click the pup: Start/Pause, Keep going, Skip, Reset, +5 min, intention, Stats, Settings, Quit |
+| Keyboard in the popover | <kbd>Tab</kbd> walks it top to bottom; <kbd>Alt</kbd>+underlined letter (e.g. <kbd>Alt</kbd>+<kbd>S</kbd> Start, <kbd>Alt</kbd>+<kbd>K</kbd> Skip, <kbd>Alt</kbd>+<kbd>W</kbd> intention); <kbd>Esc</kbd> closes |
 | Quit | the small **×** at the top-left (shows clearly on hover) |
 
 While the popover is open you can change durations. Changes to a running phase
@@ -139,6 +142,21 @@ celebrates.
 
 The bubble dims and shows a pause sign while the timer is paused, and the pup
 freezes mid-pose.
+
+### Fullscreen apps, virtual desktops and themes
+
+- **Fullscreen:** when a fullscreen video, game or presentation is the active
+  window and covers the pup, the pup steps aside and comes back when you
+  leave fullscreen. A fullscreen window on another monitor doesn't count. KWin
+  reports this, so it works on Plasma (Wayland and X11). Turn it off in
+  *Settings → Pet*.
+- **Virtual desktops:** the pup is on every desktop, so it follows you around.
+- **Light/dark:** the bubble and the break reminder follow Plasma's colour
+  scheme, and switch live when you change it. The idle bubble and the break
+  countdown use your accent colour. The popover and the Stats and Settings
+  windows use your Qt palette. That needs the system Qt (Arch's `pyside6`
+  package plus Plasma's integration). With pip's PySide6 wheels you get Qt's
+  default look.
 
 ### Keyboard shortcuts and remote control
 
@@ -332,13 +350,41 @@ Settings.
 |---|---|
 | **Timer** | durations, rounds, flow mode, auto-start next phase, one-minute warning |
 | **Focus & breaks** | Do Not Disturb, pause when away (minutes, auto-resume), break enforcement |
-| **Pet** | name, size (50–300 %), custom sprite folder, idle animations and naps |
+| **Pet** | name, size (50–300 %), custom sprite folder, hide in fullscreen, idle animations and naps |
 | **Notifications & sound** | notifications, sounds, custom phase-end sound with a Test button |
-| **Advanced** | display backend and KWin integration (with **Restart now**), tray stub, open the settings/history folders |
+| **Advanced** | display backend and KWin integration (with **Restart now**), tray stub, hook scripts, open the settings/history/hooks folders |
 
 Only the display backend and KWin integration need a restart. The Advanced tab
 says so and offers **Restart now**, which starts a fresh instance and quits
 this one.
+
+### Hooks: run your own scripts
+
+Every executable in `~/.config/pomodoro-pet/hooks.d/` runs on each timer
+event, with the event name as `$1`. *Settings → Advanced → Open hooks folder*
+creates the folder with a README.
+
+| Event | When |
+|---|---|
+| `phase_start` | a focus round or break starts running |
+| `phase_end` | a phase ends (`POMODORO_OUTCOME`: completed, skipped, reset or overtime) |
+| `paused` / `resumed` | you pause or resume |
+| `overtime_start` | flow mode or *Keep going* starts counting overtime |
+| `session_complete` | the long break is over |
+| `away` / `back` | idle detection: you left or came back |
+
+The scripts also get `POMODORO_PHASE`, `POMODORO_ROUND`, `POMODORO_ROUNDS`,
+`POMODORO_REMAINING`, `POMODORO_INTENTION`, `POMODORO_PET_NAME` and, for
+`phase_end`/`away`/`back`, `POMODORO_SECONDS`. They run in the background and
+their output is discarded. Example, pausing music while you focus:
+
+```sh
+#!/bin/sh
+case "$1:$POMODORO_PHASE" in
+  phase_start:focus)   playerctl pause ;;
+  phase_start:*_break) playerctl play ;;
+esac
+```
 
 ### The config file
 
@@ -363,6 +409,8 @@ Everything is stored in `~/.config/pomodoro-pet/config.json` (or
 | `sound` | `true` | play a chime when a phase ends |
 | `sound_file` | `null` | custom `.wav`/`.ogg` instead of the bundled chime |
 | `pet_name` | `"Biscuit"` | what the pup is called |
+| `hide_in_fullscreen` | `true` | step aside while a fullscreen app covers the pup (Plasma) |
+| `hooks_enabled` | `true` | run the scripts in `hooks.d/` on timer events |
 | `idle_animations` | `true` | look around, yawn, scratch, stretch and nap when the timer isn't running |
 | `position` | `null` | last window position (`{"x":…, "y":…}`), managed for you |
 | `scale` | `1.0` | pet size multiplier (0.5–4) |
@@ -451,14 +499,54 @@ system-tray icon (tooltip shows the full countdown). Clicking the tray icon
 brings the pup back. Not done yet: tray context menu, persisting tray mode,
 nicer icon. See `pomodoro_pet/tray.py`.
 
+## Translations
+
+All user-visible text goes through gettext. The app follows `LANGUAGE`, `LANG`
+and so on like any desktop app, and falls back to English. Qt's own dialogs
+are translated too, when Qt's translations are installed.
+
+```bash
+cp po/pomodoro-pet.pot po/de.po        # start a language, then fill in the msgstr lines
+python tools/i18n.py compile           # -> build/locale/de/LC_MESSAGES/pomodoro-pet.mo
+LANGUAGE=de python -m pomodoro_pet     # try it from the checkout
+python tools/i18n.py update            # after code changes: refresh the template, merge into every .po
+```
+
+Packages compile and install every `po/*.po` automatically. Compiling is pure
+Python, so building the package needs no gettext. No translations ship yet;
+pull requests welcome.
+
 ## Development
 
 ```bash
-pip install pytest ruff
+pip install PySide6-Essentials pytest ruff
 QT_QPA_PLATFORM=offscreen python -m pytest
 ruff check .
+python tools/i18n.py check        # translation template up to date
 python tools/generate_assets.py   # regenerate placeholder sprites/icon/chime
 ```
+
+### CI and releases
+
+`.github/workflows/ci.yml` runs on every push and pull request:
+
+- **Ubuntu job:** ruff, the translation check, and the full test suite
+  (including the end-to-end D-Bus tests) with the PySide6 wheels.
+- **Arch Linux container job:** builds the real package with `makepkg` (its
+  `check()` runs the tests against Arch's system PySide6), installs it,
+  smoke-tests `pomodoro-pet --version` and `--stats`, and makes sure
+  `packaging/aur/.SRCINFO` matches the AUR PKGBUILD.
+
+**AUR:** `packaging/aur/` has a `pomodoro-pet-git` PKGBUILD that builds the
+latest commit from GitHub, plus its `.SRCINFO`. To publish:
+
+1. make the GitHub repository public
+2. put your name in the Maintainer line
+3. run `makepkg --printsrcinfo > .SRCINFO`
+4. push both files to `ssh://aur@aur.archlinux.org/pomodoro-pet-git.git`
+
+Both PKGBUILDs install the non-Python files through
+`packaging/install-files.sh`, so they can't drift apart.
 
 Layout:
 
@@ -481,9 +569,14 @@ pomodoro_pet/
   assets.py     asset lookup and sprite loading (folders or sheets)
   config.py     ~/.config/pomodoro-pet/config.json
   tray.py       experimental tray stub
+  theme.py      light/dark scheme and accent colour
+  hooks.py      user hook scripts (hooks.d/)
+  i18n.py       gettext setup
 assets/         sprites, icon, chime
-packaging/      .desktop, PKGBUILD, KWin rule, user install script
-tools/          asset generator
+po/             translation template (pomodoro-pet.pot) and translations
+packaging/      .desktop, Arch + AUR PKGBUILDs, install-files.sh, KWin rule, user install script
+tools/          asset generator, i18n tool (extract / compile / check)
+.github/        CI workflow
 tests/          unit tests + an end-to-end D-Bus test (private bus, fake notification server)
 ```
 

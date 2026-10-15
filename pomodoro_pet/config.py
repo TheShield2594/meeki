@@ -34,6 +34,7 @@ DEFAULTS: dict[str, Any] = {
     "sound_file": None,  # None -> bundled chime
     # Pet window
     "pet_name": "Biscuit",
+    "hide_in_fullscreen": True,  # step aside for fullscreen videos, games and presentations
     "idle_animations": True,  # look around, yawn, scratch, stretch, nap when nothing's going on
     "position": None,  # {"x": int, "y": int} or None for "bottom-right of primary screen"
     "scale": 1.0,
@@ -41,6 +42,8 @@ DEFAULTS: dict[str, Any] = {
     # Platform
     "backend": "auto",  # "auto" | "wayland" | "xcb"
     "kwin_integration": True,  # use KWin scripting for keep-above + positioning on Wayland
+    # Your own scripts in ~/.config/pomodoro-pet/hooks.d/ run on timer events
+    "hooks_enabled": True,
     # Experimental (stub): hide the pet and show the countdown in the system tray instead
     "minimize_to_tray": False,
 }

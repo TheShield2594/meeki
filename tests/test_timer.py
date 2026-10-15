@@ -370,3 +370,19 @@ def test_warning_fires_once_per_phase_and_not_for_short_phases():
     t.start()
     run_for(t, c, 241)
     assert warnings[-1] == (Phase.FOCUS, 59) and len(warnings) == 2  # new phase, new warning
+
+
+def test_adjust_adds_and_removes_time_but_keeps_a_second():
+    t, c = make(warn_seconds=60)
+    t.adjust(60)
+    assert t.remaining_seconds() == 25 * 60  # idle: nothing to adjust
+    t.start()
+    run_for(t, c, 100)
+    t.adjust(60)
+    assert t.remaining_seconds() == 25 * 60 - 40
+    t.adjust(-120)
+    assert t.remaining_seconds() == 25 * 60 - 160
+    t.pause()
+    t.adjust(-10_000)
+    assert t.remaining_seconds() == 1
+    assert round(t.elapsed()) == 100  # time actually spent is unchanged

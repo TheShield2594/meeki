@@ -5,6 +5,7 @@ Stats and Settings windows. Everything else lives in the Settings window."""
 from __future__ import annotations
 
 from PySide6.QtCore import QPoint, QStringListModel, Qt, Signal
+from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QCompleter,
     QFormLayout,
@@ -18,6 +19,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from .i18n import _
 from .timer import Phase, PomodoroTimer, State
 from .wayland import running_on_wayland
 
@@ -64,10 +66,11 @@ class Popover(QFrame):
         self.status.setObjectName("status")
 
         self.intention = QLineEdit()
-        self.intention.setPlaceholderText("What are you focusing on?")
+        self.intention.setPlaceholderText(_("What are you focusing on?"))
         self.intention.setMaxLength(120)
         self.intention.setClearButtonEnabled(True)
-        self.intention.setToolTip("Logged with each round. Press Enter to start focusing.")
+        self.intention.setToolTip(_("Logged with each round. Press Enter to start focusing. (Alt+W)"))
+        self.intention.setAccessibleName(_("What are you focusing on"))
         self._suggestions = QStringListModel(self)
         completer = QCompleter(self._suggestions, self)
         completer.setCaseSensitivity(Qt.CaseInsensitive)
@@ -76,22 +79,24 @@ class Popover(QFrame):
         self._committed_intention = ""
 
         self.spins = {
-            "focus_minutes": make_spin(1, 240, " min"),
-            "short_break_minutes": make_spin(1, 120, " min"),
-            "long_break_minutes": make_spin(1, 240, " min"),
+            "focus_minutes": make_spin(1, 240, _(" min")),
+            "short_break_minutes": make_spin(1, 120, _(" min")),
+            "long_break_minutes": make_spin(1, 240, _(" min")),
             "rounds": make_spin(1, 12),
         }
         form = QFormLayout()
         form.setLabelAlignment(Qt.AlignRight)
-        for label, key in zip(("Focus", "Short break", "Long break", "Rounds"), DURATION_KEYS, strict=True):
+        # "&" marks the Alt+letter shortcut; QFormLayout makes each label the field's buddy
+        labels = (_("&Focus"), _("S&hort break"), _("&Long break"), _("Rou&nds"))
+        for label, key in zip(labels, DURATION_KEYS, strict=True):
             form.addRow(label, self.spins[key])
             self.spins[key].valueChanged.connect(lambda value, k=key: self.options_changed.emit({k: value}))
 
-        self.start_btn = QPushButton("Start")
+        self.start_btn = QPushButton(_("&Start"))
         self.start_btn.setObjectName("primary")
         self.start_btn.setDefault(True)
-        self.reset_btn = QPushButton("Reset")
-        self.skip_btn = QPushButton("Skip")
+        self.reset_btn = QPushButton(_("&Reset"))
+        self.skip_btn = QPushButton(_("S&kip"))
         buttons = QHBoxLayout()
         buttons.addWidget(self.start_btn, 2)
         buttons.addWidget(self.skip_btn, 1)
@@ -103,11 +108,11 @@ class Popover(QFrame):
         self.mood_label = QLabel()
         self.summary_label = QLabel()
         self.summary_label.setObjectName("muted")
-        self.stats_btn = QPushButton("Stats")
-        self.stats_btn.setToolTip("Focus history, streaks and charts")
-        self.settings_btn = QPushButton("Settings")
-        self.settings_btn.setToolTip("Breaks, idle detection, flow mode, sounds, the pup…")
-        self.tray_btn = QPushButton("Minimize to tray (experimental)")
+        self.stats_btn = QPushButton(_("S&tats"))
+        self.stats_btn.setToolTip(_("Focus history, streaks and charts"))
+        self.settings_btn = QPushButton(_("Settin&gs"))
+        self.settings_btn.setToolTip(_("Breaks, idle detection, flow mode, sounds, the pup…"))
+        self.tray_btn = QPushButton(_("Minimize to tray (experimental)"))
         footer = QHBoxLayout()
         footer.addWidget(self.stats_btn)
         footer.addWidget(self.settings_btn)
@@ -125,6 +130,14 @@ class Popover(QFrame):
         layout.addLayout(footer)
         layout.addWidget(self.tray_btn)
         self.tray_btn.hide()
+
+        # keyboard: Tab walks top to bottom, Alt+W jumps to the intention, Esc closes
+        order = [self.intention, *self.spins.values(), self.start_btn, self.skip_btn, self.reset_btn,
+                 self.stats_btn, self.settings_btn, self.tray_btn]
+        for first, second in zip(order, order[1:], strict=False):
+            QWidget.setTabOrder(first, second)
+        QShortcut(QKeySequence("Alt+W"), self, activated=lambda: (self.intention.setFocus(),
+                                                                   self.intention.selectAll()))
 
         self.intention.editingFinished.connect(self._commit_intention)
         self.intention.returnPressed.connect(self._start_from_intention)
@@ -195,26 +208,26 @@ class Popover(QFrame):
     def refresh(self, *_args) -> None:
         t = self.timer
         if t.state is State.COMPLETE:
-            text = "Session complete! 🎉"
+            text = _("Session complete! 🎉")
         elif t.state is State.IDLE:
-            text = "Ready when you are"
+            text = _("Ready when you are")
         else:
             phase = t.phase.label
             if t.phase is Phase.FOCUS:
-                phase += f" · round {t.round}/{t.rounds}"
+                phase += _(" · round {round}/{rounds}").format(round=t.round, rounds=t.rounds)
             if t.in_overtime:
-                phase += " · overtime 🌊"
-            text = phase + (" (paused)" if t.state is State.PAUSED else "")
+                phase += _(" · overtime 🌊")
+            text = phase + (_(" (paused)") if t.state is State.PAUSED else "")
         self.status.setText(text)
-        labels = {State.RUNNING: "Pause", State.PAUSED: "Resume"}
+        labels = {State.RUNNING: _("&Pause"), State.PAUSED: _("Res&ume")}
         if t.in_overtime:
-            self.start_btn.setText("Take break")
-            self.skip_btn.setText(labels.get(t.state, "Pause"))
+            self.start_btn.setText(_("Take &break"))
+            self.skip_btn.setText(labels.get(t.state, _("&Pause")))
             self.skip_btn.setToolTip("")
         else:
-            self.start_btn.setText(labels.get(t.state, "Start"))
-            self.skip_btn.setText("Skip")
-            self.skip_btn.setToolTip("End the current phase now")
+            self.start_btn.setText(labels.get(t.state, _("&Start")))
+            self.skip_btn.setText(_("S&kip"))
+            self.skip_btn.setToolTip(_("End the current phase now"))
         self.skip_btn.setEnabled(t.state in (State.RUNNING, State.PAUSED))
 
     def popup_near(self, anchor: QWidget, local_rect) -> None:

@@ -252,3 +252,33 @@ def test_flow_mode_counts_overtime_until_take_break(env):
         assert wait_for(lambda: cli(e, "--status")[1].startswith("Short break · "))
     finally:
         stop_app(app)
+
+
+def test_a_stale_lock_with_a_reused_pid_does_not_block_startup(env):
+    """After a crash the lock file stays behind, and its PID may by now belong
+    to an unrelated Python program (Qt alone would then think we're running)."""
+    e, _log, _tmp = env
+    lock_path = os.path.join(e["XDG_RUNTIME_DIR"], "pomodoro-pet.lock")
+    # a "pet" that takes the lock and crashes without cleaning up
+    subprocess.run(
+        [sys.executable, "-c",
+         "import os, sys\n"
+         "from PySide6.QtCore import QLockFile\n"
+         "lock = QLockFile(sys.argv[1]); assert lock.tryLock(100); os._exit(0)",
+         lock_path],
+        env=e, check=True, timeout=20,
+    )
+    # ...and an unrelated Python program that now has a PID of its own in the file
+    other = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"])
+    try:
+        lines = Path(lock_path).read_text().splitlines()
+        lines[0] = str(other.pid)
+        Path(lock_path).write_text("\n".join(lines) + "\n")
+        app = start_app(e)
+        try:
+            assert cli(e, "--status") == (0, "Idle · 25:00")
+        finally:
+            stop_app(app)
+    finally:
+        other.kill()
+        other.wait(5)

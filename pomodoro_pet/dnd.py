@@ -14,6 +14,7 @@ from __future__ import annotations
 import logging
 
 from .config import APP_ID
+from .i18n import _
 
 log = logging.getLogger(__name__)
 
@@ -43,7 +44,7 @@ class DoNotDisturb:
                 "org.freedesktop.Notifications", "/org/freedesktop/Notifications",
                 "org.freedesktop.Notifications", bus,
             )
-            reply = iface.call("Inhibit", APP_ID, "Focus round in progress", {})
+            reply = iface.call("Inhibit", APP_ID, _("Focus round in progress"), {})
             ok = reply.type() == QDBusMessage.ReplyMessage
             if not ok and not self._warned:
                 self._warned = True

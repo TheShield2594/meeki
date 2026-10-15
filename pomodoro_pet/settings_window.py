@@ -7,7 +7,7 @@ from __future__ import annotations
 import os
 
 from PySide6.QtCore import Qt, QUrl, Signal
-from PySide6.QtGui import QDesktopServices
+from PySide6.QtGui import QDesktopServices, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from .i18n import _
 from .popover import make_spin
 
 STYLE = """
@@ -30,14 +31,14 @@ QLabel#restart { font-weight: 600; }
 """
 
 BREAK_MODES = [
-    ("nudge", "Nudge me", "The pup wiggles and reminds you if you keep using the computer during a break."),
-    ("overlay", "Dim the screen", "A full-screen break reminder on every monitor, with snooze and skip."),
-    ("off", "Off", "Breaks are up to you."),
+    ("nudge", _("Nudge me"), _("The pup wiggles and reminds you if you keep using the computer during a break.")),
+    ("overlay", _("Dim the screen"), _("A full-screen break reminder on every monitor, with snooze and skip.")),
+    ("off", _("Off"), _("Breaks are up to you.")),
 ]
 BACKENDS = [
-    ("auto", "Automatic (recommended)"),
-    ("wayland", "Native Wayland"),
-    ("xcb", "XWayland / X11"),
+    ("auto", _("Automatic (recommended)")),
+    ("wayland", _("Native Wayland")),
+    ("xcb", _("XWayland / X11")),
 ]
 RESTART_KEYS = ("backend", "kwin_integration")
 
@@ -74,8 +75,8 @@ class _PathPicker(QWidget):
         self.edit = QLineEdit()
         self.edit.setReadOnly(True)
         self.edit.setPlaceholderText(placeholder)
-        browse = QPushButton("Browse…")
-        clear = QPushButton("Default")
+        browse = QPushButton(_("Browse…"))
+        clear = QPushButton(_("Default"))
         browse.clicked.connect(self._browse)
         clear.clicked.connect(lambda: self._set(None))
         lay = QHBoxLayout(self)
@@ -110,7 +111,7 @@ class SettingsWindow(QWidget):
 
     def __init__(self, config_dir: str, data_file: str, platform_name: str, started_with: dict):
         super().__init__(None, Qt.Window)
-        self.setWindowTitle("Pomodoro Pet — Settings")
+        self.setWindowTitle(_("Pomodoro Pet — Settings"))
         self.setStyleSheet(STYLE)
         self.setMinimumWidth(500)
         self._started_with = started_with  # backend & kwin_integration this process launched with
@@ -118,17 +119,18 @@ class SettingsWindow(QWidget):
         self.w: dict[str, QWidget] = {}
 
         tabs = QTabWidget()
-        tabs.addTab(self._timer_page(), "Timer")
-        tabs.addTab(self._focus_page(), "Focus && breaks")
-        tabs.addTab(self._pet_page(), "Pet")
-        tabs.addTab(self._sound_page(), "Notifications && sound")
-        tabs.addTab(self._advanced_page(config_dir, data_file, platform_name), "Advanced")
+        tabs.addTab(self._timer_page(), _("&Timer"))
+        tabs.addTab(self._focus_page(), _("&Focus && breaks"))
+        tabs.addTab(self._pet_page(), _("&Pet"))
+        tabs.addTab(self._sound_page(), _("&Notifications && sound"))
+        tabs.addTab(self._advanced_page(config_dir, data_file, platform_name), _("&Advanced"))
         self.tabs = tabs
 
-        close = QPushButton("Close")
+        close = QPushButton(_("&Close"))
         close.clicked.connect(self.close)
+        QShortcut(QKeySequence(Qt.Key_Escape), self, activated=self.close)
         bottom = QHBoxLayout()
-        bottom.addWidget(_hint("Changes apply right away."), 1)
+        bottom.addWidget(_hint(_("Changes apply right away.")), 1)
         bottom.addWidget(close)
         layout = QVBoxLayout(self)
         layout.addWidget(tabs)
@@ -156,7 +158,7 @@ class SettingsWindow(QWidget):
 
     def _combo(self, key: str, items) -> QComboBox:
         combo = QComboBox()
-        for data, label, *_ in items:
+        for data, label, *_rest in items:
             combo.addItem(label, data)
         combo.currentIndexChanged.connect(lambda _i: self._emit(key, combo.currentData()))
         self.w[key] = combo
@@ -165,32 +167,32 @@ class SettingsWindow(QWidget):
     # ---- pages ---------------------------------------------------------
     def _timer_page(self) -> QWidget:
         form = QFormLayout()
-        form.addRow("Focus", self._spin("focus_minutes", 1, 240, " min"))
-        form.addRow("Short break", self._spin("short_break_minutes", 1, 120, " min"))
-        form.addRow("Long break", self._spin("long_break_minutes", 1, 240, " min"))
-        form.addRow("Rounds before the long break", self._spin("rounds", 1, 12))
-        focus_end = self._combo("flow_mode", [(False, "Start my break"), (True, "Keep going (flow mode)")])
-        form.addRow("When a focus round ends", focus_end)
+        form.addRow(_("Focus"), self._spin("focus_minutes", 1, 240, _(" min")))
+        form.addRow(_("Short break"), self._spin("short_break_minutes", 1, 120, _(" min")))
+        form.addRow(_("Long break"), self._spin("long_break_minutes", 1, 240, _(" min")))
+        form.addRow(_("Rounds before the long break"), self._spin("rounds", 1, 12))
+        focus_end = self._combo("flow_mode", [(False, _("Start my break")), (True, _("Keep going (flow mode)"))])
+        form.addRow(_("When a focus round ends"), focus_end)
         return _page(
             form,
-            _hint("Flow mode: a finished round counts as done and the timer counts your overtime up "
+            _hint(_("Flow mode: a finished round counts as done and the timer counts your overtime up "
                   "until you click Take break. Without it, the round-done notification still has a "
-                  "Keep going button."),
-            self._check("auto_advance", "Start the next phase automatically",
-                        "Off: the timer waits for you at the start of each phase"),
-            self._check("minute_warning", "One-minute warning",
-                        "A soft tone, a word from the pup and a pulsing bubble a minute before the end"),
+                  "Keep going button.")),
+            self._check("auto_advance", _("Start the next phase automatically"),
+                        _("Off: the timer waits for you at the start of each phase")),
+            self._check("minute_warning", _("One-minute warning"),
+                        _("A soft tone, a word from the pup and a pulsing bubble a minute before the end")),
         )
 
     def _focus_page(self) -> QWidget:
-        idle = self._check("idle_pause", "Pause focus rounds when I step away")
-        minutes = self._spin("idle_minutes", 1, 60, " min")
-        resume = self._check("idle_auto_resume", "Resume by myself when you're back (don't ask)")
+        idle = self._check("idle_pause", _("Pause focus rounds when I step away"))
+        minutes = self._spin("idle_minutes", 1, 60, _(" min"))
+        resume = self._check("idle_auto_resume", _("Resume by myself when you're back (don't ask)"))
         idle.toggled.connect(minutes.setEnabled)
         idle.toggled.connect(resume.setEnabled)
         idle_row = QHBoxLayout()
         idle_row.addSpacing(24)
-        idle_row.addWidget(QLabel("Away after no keyboard/mouse input for"))
+        idle_row.addWidget(QLabel(_("Away after no keyboard/mouse input for")))
         idle_row.addWidget(minutes)
         idle_row.addStretch(1)
         resume_row = QHBoxLayout()
@@ -201,12 +203,12 @@ class SettingsWindow(QWidget):
         self._break_hint = _hint("")
         breaks.currentIndexChanged.connect(self._update_break_hint)
         break_row = QFormLayout()
-        break_row.addRow("If I keep working during a break", breaks)
+        break_row.addRow(_("If I keep working during a break"), breaks)
         return _page(
-            self._check("dnd_during_focus", "Do Not Disturb while focusing",
-                        "Plasma holds back other notifications during focus rounds"),
+            self._check("dnd_during_focus", _("Do Not Disturb while focusing"),
+                        _("Plasma holds back other notifications during focus rounds")),
             idle, idle_row, resume_row,
-            _hint("A locked screen counts as away straight away. Idle minutes never count as focus."),
+            _hint(_("A locked screen counts as away straight away. Idle minutes never count as focus.")),
             break_row, self._break_hint,
         )
 
@@ -220,78 +222,92 @@ class SettingsWindow(QWidget):
         size.valueChanged.connect(lambda v: self._emit("scale", round(v / 100, 2)))
         self.w["scale"] = size
         sprites = _PathPicker(
-            "Bundled Bichon × Biewer pup",
-            lambda parent: QFileDialog.getExistingDirectory(parent, "Folder with your sprites"),
+            _("Bundled Bichon × Biewer pup"),
+            lambda parent: QFileDialog.getExistingDirectory(parent, _("Folder with your sprites")),
         )
         sprites.changed.connect(lambda path: self._emit("sprite_dir", path))
         self.w["sprite_dir"] = sprites
         form = QFormLayout()
-        form.addRow("Name", name)
-        form.addRow("Size", size)
-        form.addRow("Custom sprites", sprites)
+        form.addRow(_("Name"), name)
+        form.addRow(_("Size"), size)
+        form.addRow(_("Custom sprites"), sprites)
         return _page(
             form,
-            self._check("idle_animations", "Idle animations and naps",
-                        "When the timer isn't running the pup looks around, yawns, scratches and stretches, "
-                        "and naps after 5 quiet minutes"),
-            _hint("Pet the pup by rubbing the pointer back and forth over it."),
-            _hint("A sprite folder has one subfolder of PNG frames (or one sprite-sheet PNG) per state: "
+            self._check("hide_in_fullscreen", _("Hide while a fullscreen app covers the pet"),
+                        _("Videos, games and presentations get the screen to themselves (KDE Plasma)")),
+            self._check("idle_animations", _("Idle animations and naps"),
+                        _("When the timer isn't running the pup looks around, yawns, scratches and stretches, "
+                        "and naps after 5 quiet minutes")),
+            _hint(_("Pet the pup by rubbing the pointer back and forth over it.")),
+            _hint(_("A sprite folder has one subfolder of PNG frames (or one sprite-sheet PNG) per state: "
                   "idle, focusing, break, celebrating, and optionally sulky, petted, look, yawn, "
-                  "scratch and stretch. Missing states use the bundled pup."),
+                  "scratch and stretch. Missing states use the bundled pup.")),
         )
 
     def _sound_page(self) -> QWidget:
-        test = QPushButton("Test")
+        test = QPushButton(_("Test"))
         test.clicked.connect(self.test_sound_requested)
         sound = _PathPicker(
-            "Bundled chime",
+            _("Bundled chime"),
             lambda parent: QFileDialog.getOpenFileName(
-                parent, "Sound for the end of a phase", os.path.expanduser("~"), "Sounds (*.wav *.ogg *.oga *.flac)"
+                parent, _("Sound for the end of a phase"), os.path.expanduser("~"),
+                _("Sounds") + " (*.wav *.ogg *.oga *.flac)",
             )[0],
             extra=test,
         )
         sound.changed.connect(lambda path: self._emit("sound_file", path))
         self.w["sound_file"] = sound
         form = QFormLayout()
-        form.addRow("Phase-end sound", sound)
+        form.addRow(_("Phase-end sound"), sound)
         return _page(
-            self._check("notifications", "Show a notification when a phase ends"),
-            self._check("sound", "Play sounds (phase end and one-minute warning)"),
+            self._check("notifications", _("Show a notification when a phase ends")),
+            self._check("sound", _("Play sounds (phase end and one-minute warning)")),
             form,
         )
 
     def _advanced_page(self, config_dir: str, data_file: str, platform_name: str) -> QWidget:
         backend = self._combo("backend", [(k, label) for k, label in BACKENDS])
         form = QFormLayout()
-        form.addRow("Display backend", backend)
-        kwin = self._check("kwin_integration", "Use KWin to keep the pet on top and remember its position (Wayland)")
-        self._restart_label = QLabel("Restart Pomodoro Pet to apply this.")
+        form.addRow(_("Display backend"), backend)
+        kwin = self._check("kwin_integration", _("Use KWin to keep the pet on top and remember its position (Wayland)"))
+        self._restart_label = QLabel(_("Restart Pomodoro Pet to apply this."))
         self._restart_label.setObjectName("restart")
-        restart = QPushButton("Restart now")
+        restart = QPushButton(_("Restart now"))
         restart.clicked.connect(self.restart_requested)
         restart_row = QHBoxLayout()
         restart_row.addWidget(self._restart_label, 1)
         restart_row.addWidget(restart)
         self._restart_widgets = (self._restart_label, restart)
 
-        open_config = QPushButton("Open settings folder")
+        open_config = QPushButton(_("Open settings folder"))
         open_config.clicked.connect(lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(config_dir)))
-        open_data = QPushButton("Open history folder")
+        open_data = QPushButton(_("Open history folder"))
         open_data.clicked.connect(
             lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(os.path.dirname(data_file)))
         )
+        open_hooks = QPushButton(_("Open hooks folder"))
+        open_hooks.clicked.connect(self._open_hooks)
         files = QHBoxLayout()
         files.addWidget(open_config)
         files.addWidget(open_data)
+        files.addWidget(open_hooks)
         files.addStretch(1)
         return _page(
             form,
-            _hint(f"Running on: {platform_name}. Automatic uses native Wayland on KDE Plasma and "
-                  "XWayland on other Wayland desktops."),
+            _hint(_("Running on: {platform}. Automatic uses native Wayland on KDE Plasma and "
+                    "XWayland on other Wayland desktops.").format(platform=platform_name)),
             kwin, restart_row,
-            self._check("minimize_to_tray", "Show a “Minimize to tray” button (experimental)"),
+            self._check("minimize_to_tray", _("Show a “Minimize to tray” button (experimental)")),
+            self._check("hooks_enabled", _("Run my hook scripts on timer events"),
+                        _("Executables in the hooks folder run on phase start/end, pause, resume, overtime, "
+                        "session complete, away and back. See README.txt there.")),
             files,
         )
+
+    def _open_hooks(self) -> None:
+        from .hooks import ensure_hooks_dir
+
+        QDesktopServices.openUrl(QUrl.fromLocalFile(str(ensure_hooks_dir())))
 
     # ---- state ---------------------------------------------------------
     def _update_break_hint(self, *_args) -> None:

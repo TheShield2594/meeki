@@ -10,6 +10,8 @@ import random
 import time
 from collections.abc import Callable
 
+from .i18n import _
+
 
 class RubDetector:
     """Spots petting: the pointer rubbing back and forth over the pup.
@@ -113,4 +115,5 @@ class IdleLife:
         return action
 
 
-PET_LINES = ["*happy wiggles* 🐾", "More scritches please! 🥰", "Best human ever 💕", "Right behind the ears! 🐶"]
+PET_LINES = [_("*happy wiggles* 🐾"), _("More scritches please! 🥰"), _("Best human ever 💕"),
+             _("Right behind the ears! 🐶")]

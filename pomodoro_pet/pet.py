@@ -5,11 +5,13 @@ from __future__ import annotations
 import math
 import time
 
-from PySide6.QtCore import QPoint, QPointF, QRect, QRectF, Qt, QTimer, Signal
+from PySide6.QtCore import QEvent, QPoint, QPointF, QRect, QRectF, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QFont, QPainter, QPainterPath, QPen, QRegion
 from PySide6.QtWidgets import QApplication, QWidget
 
+from . import theme
 from .behaviour import IdleLife, RubDetector
+from .i18n import _
 from .timer import Phase, PomodoroTimer, State, format_mmss
 from .wayland import running_on_wayland
 
@@ -34,6 +36,8 @@ class PetWindow(QWidget):
     clicked = Signal()
     quit_requested = Signal()
     petted = Signal()  # a petting session started
+    scrolled = Signal(int)  # wheel steps over the bubble: +1 up, -1 down
+    menu_requested = Signal(QPoint)  # right-click, global position
     moved = Signal(int, int)  # global position, only emitted where it is known (X11/XWayland)
 
     def __init__(self, timer: PomodoroTimer, sprites: dict, scale: float = 1.0):
@@ -68,6 +72,7 @@ class PetWindow(QWidget):
         self._shake = QTimer(self, interval=33)
         self._shake.timeout.connect(self._shake_step)
         # petting + idle life
+        self._wheel = 0  # accumulated angle delta (touchpads send small steps)
         self._rub = RubDetector()
         self._petting_until = 0.0
         self._action: str | None = None  # one-shot idle animation being played
@@ -82,6 +87,7 @@ class PetWindow(QWidget):
         self._move_debounce = QTimer(self, singleShot=True, interval=400)
         self._move_debounce.timeout.connect(lambda: self.moved.emit(self.x(), self.y()))
 
+        theme.watch(self.update)  # Plasma light/dark switch
         timer.tick.connect(self._on_tick)
         timer.state_changed.connect(lambda *_: (self.life.touch(), self._refresh_state()))
         timer.phase_changed.connect(lambda *_: self._refresh_state())
@@ -266,10 +272,11 @@ class PetWindow(QWidget):
     def _paint_bubble(self, p: QPainter) -> None:
         t = self.timer
         r = QRectF(self.bubble_rect)
+        colors = theme.bubble_colors()
         if t.state is State.COMPLETE:
-            accent, text = QColor("#f9a825"), "Done!"
+            accent, text = QColor("#f9a825"), _("Done!")
         elif t.state is State.IDLE:
-            accent, text = QColor("#9e9e9e"), format_mmss(self._remaining)
+            accent, text = colors.idle_accent, format_mmss(self._remaining)
         elif t.in_overtime:
             accent, text = OVERTIME_COLOR, "+" + format_mmss(self._remaining)
         else:
@@ -291,11 +298,11 @@ class PetWindow(QWidget):
         tail.closeSubpath()
         path = path.united(tail)
         p.setPen(QPen(accent, pen_width))
-        p.setBrush(QColor(255, 255, 255, 235))
+        p.setBrush(colors.fill)
         p.drawPath(path)
 
         p.setFont(self.font_time)
-        p.setPen(QColor("#303030") if t.state is not State.PAUSED else QColor("#8a8a8a"))
+        p.setPen(colors.text if t.state is not State.PAUSED else colors.dim_text)
         text_rect = r.adjusted(0, 2, 0, -r.height() * 0.38)
         p.drawText(text_rect, Qt.AlignCenter, text)
 
@@ -321,7 +328,7 @@ class PetWindow(QWidget):
 
         if t.state is State.PAUSED:  # pause glyph in the corner
             p.setPen(Qt.NoPen)
-            p.setBrush(QColor("#8a8a8a"))
+            p.setBrush(colors.dim_text)
             px, py = r.right() - 13, r.top() + 6
             p.drawRect(QRectF(px, py, 2.5, 8))
             p.drawRect(QRectF(px + 4.5, py, 2.5, 8))
@@ -341,6 +348,27 @@ class PetWindow(QWidget):
         p.drawLine(QPointF(c.x() - d, c.y() + d), QPointF(c.x() + d, c.y() - d))
 
     # ---- mouse ---------------------------------------------------------
+    def wheelEvent(self, event) -> None:
+        if not self.bubble_rect.adjusted(-8, -4, 4, 8).contains(event.position().toPoint()):
+            event.ignore()
+            return
+        self._wheel += event.angleDelta().y()
+        steps = int(self._wheel / 120)
+        if steps:
+            self._wheel -= steps * 120
+            self.scrolled.emit(steps)
+        event.accept()
+
+    def contextMenuEvent(self, event) -> None:
+        self.life.touch()
+        self.menu_requested.emit(event.globalPos())
+        event.accept()
+
+    def changeEvent(self, event) -> None:
+        if event.type() in (QEvent.PaletteChange, QEvent.ApplicationPaletteChange):
+            self.update()  # colour scheme changed
+        super().changeEvent(event)
+
     def enterEvent(self, _event) -> None:
         self._hover = True
         if self.life.touch():  # you woke it from a nap

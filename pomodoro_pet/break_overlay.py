@@ -14,6 +14,8 @@ from PySide6.QtCore import QObject, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QGuiApplication, QPainter
 from PySide6.QtWidgets import QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
 
+from . import theme
+from .i18n import _
 from .timer import format_mmss
 from .wayland import OVERLAY_TITLE
 
@@ -21,24 +23,14 @@ MAX_SNOOZES = 2
 SNOOZE_SECONDS = 60
 
 TIPS = [
-    "Stand up and stretch your back and shoulders.",
-    "Look at something 20 feet away for 20 seconds.",
-    "Get a glass of water.",
-    "Roll your shoulders and unclench your jaw.",
-    "Take five slow, deep breaths.",
-    "Walk around for a minute. {name} approves.",
-    "Rest your eyes. Close them for a bit.",
+    _("Stand up and stretch your back and shoulders."),
+    _("Look at something 20 feet away for 20 seconds."),
+    _("Get a glass of water."),
+    _("Roll your shoulders and unclench your jaw."),
+    _("Take five slow, deep breaths."),
+    _("Walk around for a minute. {name} approves."),
+    _("Rest your eyes. Close them for a bit."),
 ]
-
-STYLE = """
-QWidget#card { background: rgba(255, 255, 255, 235); border-radius: 22px; }
-QLabel { color: #303030; }
-QLabel#title { font-size: 22pt; font-weight: 700; }
-QLabel#time { font-size: 44pt; font-weight: 700; color: #1e88e5; }
-QLabel#tip { font-size: 13pt; color: #555555; }
-QPushButton { padding: 8px 18px; font-size: 11pt; }
-"""
-
 
 class _SpriteView(QWidget):
     def __init__(self, frames, size: int):
@@ -66,7 +58,7 @@ class _OverlayWindow(QWidget):
         )
         self.setWindowTitle(OVERLAY_TITLE)
         self.setAttribute(Qt.WA_TranslucentBackground, True)
-        self.setStyleSheet(STYLE)
+        self.setStyleSheet(theme.overlay_style())  # light/dark like the desktop
         self._screen = screen
         self.setScreen(screen)
         self.setGeometry(screen.geometry())
@@ -75,15 +67,15 @@ class _OverlayWindow(QWidget):
         card.setObjectName("card")
         card.setAttribute(Qt.WA_StyledBackground, True)
         self.sprite = _SpriteView(frames, 200)
-        title = QLabel(f"Break time with {pet_name}")
+        title = QLabel(_("Break time with {name}").format(name=pet_name))
         title.setObjectName("title")
         self.time = QLabel()
         self.time.setObjectName("time")
         self.tip = QLabel()
         self.tip.setObjectName("tip")
         self.tip.setWordWrap(True)
-        self.snooze_btn = QPushButton("Snooze 1 min")
-        self.skip_btn = QPushButton("Skip break")
+        self.snooze_btn = QPushButton(_("Snooze 1 min"))
+        self.skip_btn = QPushButton(_("Skip break"))
         self.snooze_btn.clicked.connect(self.snooze)
         self.skip_btn.clicked.connect(self.skip)
 
@@ -195,7 +187,7 @@ class BreakOverlay(QObject):
             w.time.setText(format_mmss(self.remaining))
             w.tip.setText(self._tip.format(name=self.pet_name))
             w.snooze_btn.setEnabled(left > 0)
-            w.snooze_btn.setText(f"Snooze 1 min ({left} left)" if left else "No snoozes left")
+            w.snooze_btn.setText(_("Snooze 1 min ({left} left)").format(left=left) if left else _("No snoozes left"))
 
     def _animate(self) -> None:
         for w in self.windows:

@@ -7,7 +7,7 @@ The running app owns io.github.pomodoropet on the session bus and exports
     Settings                                  -> ()
     Status                                    -> s
     SetIntention(s)                           what you're focusing on
-    reportPosition(s)                         used by the KWin script
+    reportPosition(s), reportFullscreen(s)    used by the KWin script
 
 The KDE global shortcuts (see packaging/pomodoro-pet.desktop, installed into
 kglobalaccel/) simply run `pomodoro-pet --toggle` and friends.
@@ -34,6 +34,7 @@ class PetService(QObject):
     command = Signal(str)  # one of COMMANDS except "status"
     position_reported = Signal(int, int)
     intention_set = Signal(str)
+    fullscreen_changed = Signal(bool)  # a fullscreen window covers the pet (KWin script)
 
     def __init__(self, status_provider: Callable[[], str], parent: QObject | None = None):
         super().__init__(parent)
@@ -98,6 +99,10 @@ class PetService(QObject):
     @Slot(str)
     def SetIntention(self, text: str) -> None:  # noqa: N802
         self.intention_set.emit(text.strip()[:120])
+
+    @Slot(str)
+    def reportFullscreen(self, flag: str) -> None:  # noqa: N802
+        self.fullscreen_changed.emit(flag == "1")
 
     @Slot(str)
     def reportPosition(self, xy: str) -> None:  # noqa: N802

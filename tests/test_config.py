@@ -47,3 +47,28 @@ def test_session_file_roundtrip(tmp_path):
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("garbage")
     assert load_session(path) is None
+
+
+def test_stale_lock_detection_looks_at_the_real_process(tmp_path):
+    import subprocess
+    import sys
+
+    from pomodoro_pet.app import lock_owner_is_pet
+
+    class FakeLock:
+        def __init__(self, pid):
+            self.pid = pid
+
+        def getLockInfo(self):  # noqa: N802
+            return (self.pid, "host", "python3")
+
+    other = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(30)"])
+    pet = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(30)", "-m", "pomodoro_pet"])
+    try:
+        assert lock_owner_is_pet(FakeLock(other.pid)) is False  # a reused PID: stale
+        assert lock_owner_is_pet(FakeLock(pet.pid)) is True
+        assert lock_owner_is_pet(FakeLock(999_999_999)) is False  # long gone
+        assert lock_owner_is_pet(FakeLock("garbage")) is True  # can't tell
+    finally:
+        other.kill()
+        pet.kill()

@@ -81,20 +81,45 @@ _KWIN_SCRIPT = r"""
 (function () {
     var CFG = __CONFIG__;
     var handled = [];
+    var petGeo = null;       // last known pet geometry {x, y, width, height}
+    var fullscreen = null;   // last state reported to the app
     function windows() {
         return workspace.windowList ? workspace.windowList() : workspace.clientList();
+    }
+    function activeWindow() {
+        return workspace.activeWindow !== undefined ? workspace.activeWindow : workspace.activeClient;
     }
     function ours(w, caption) {
         if (!w || w.popupWindow) return false;
         var cls = String(w.resourceClass || ""), name = String(w.resourceName || "");
-        return (cls === CFG.appId || name === CFG.appId) && String(w.caption) === caption;
+        return (cls === CFG.appId || name === CFG.appId) && (caption === undefined || String(w.caption) === caption);
+    }
+    function call(method, arg) {
+        callDBus(CFG.service, CFG.path, CFG.iface, method, arg);
     }
     function report(w) {
         var g = w.frameGeometry;
-        callDBus(CFG.service, CFG.path, CFG.iface, "reportPosition",
-                 String(Math.round(g.x)) + "," + String(Math.round(g.y)));
+        petGeo = {x: Math.round(g.x), y: Math.round(g.y), width: g.width, height: g.height};
+        call("reportPosition", String(petGeo.x) + "," + String(petGeo.y));
+        checkFullscreen();
+    }
+    // Is a fullscreen window (video, game, presentation) the active one and covering the pet?
+    function covering(w) {
+        if (!w || !petGeo || ours(w) || !w.fullScreen || w.minimized) return false;
+        var g = w.frameGeometry;
+        var cx = petGeo.x + petGeo.width / 2, cy = petGeo.y + petGeo.height / 2;
+        return cx >= g.x && cx < g.x + g.width && cy >= g.y && cy < g.y + g.height;
+    }
+    function checkFullscreen() {
+        var full = covering(activeWindow());
+        if (full !== fullscreen) {
+            fullscreen = full;
+            call("reportFullscreen", full ? "1" : "0");
+        }
     }
     function setup(w) {
+        if (!w) return;
+        if (w.fullScreenChanged) w.fullScreenChanged.connect(checkFullscreen);
         if (ours(w, CFG.overlayCaption)) {  // break overlay: above everything, out of the way
             w.keepAbove = true;
             w.skipTaskbar = true;
@@ -110,9 +135,13 @@ _KWIN_SCRIPT = r"""
         w.skipTaskbar = true;
         w.skipPager = true;
         w.skipSwitcher = true;
-        if (CFG.place) {
+        w.onAllDesktops = true;  // follow you to every virtual desktop
+        // A re-shown pet (e.g. after a fullscreen app) is a new window on
+        // Wayland: put it back where it was, not where it started.
+        var target = petGeo || (CFG.place ? {x: CFG.x, y: CFG.y} : null);
+        if (CFG.place && target) {
             var g = w.frameGeometry;
-            w.frameGeometry = {x: CFG.x, y: CFG.y, width: g.width, height: g.height};
+            w.frameGeometry = {x: target.x, y: target.y, width: g.width, height: g.height};
         }
         w.frameGeometryChanged.connect(function () { report(w); });
         report(w);
@@ -120,6 +149,7 @@ _KWIN_SCRIPT = r"""
     var list = windows();
     for (var i = 0; i < list.length; i++) setup(list[i]);
     (workspace.windowAdded || workspace.clientAdded).connect(setup);
+    (workspace.windowActivated || workspace.clientActivated).connect(checkFullscreen);
 })();
 """
 

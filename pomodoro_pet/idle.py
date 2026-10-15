@@ -24,6 +24,8 @@ from collections.abc import Callable
 
 from PySide6.QtCore import QObject, QTimer, Signal
 
+from .i18n import _
+
 log = logging.getLogger(__name__)
 
 
@@ -235,9 +237,9 @@ class BreakCoach:
 
 
 NUDGES = [
-    "Psst… it's break time 🐾 Step away for a bit!",
-    "Still working? Your break is ticking away ⏳",
-    "Woof! Paws off the keyboard! 🐶",
+    _("Psst… it's break time 🐾 Step away for a bit!"),
+    _("Still working? Your break is ticking away ⏳"),
+    _("Woof! Paws off the keyboard! 🐶"),
 ]
 
 

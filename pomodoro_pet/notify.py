@@ -102,9 +102,13 @@ def notify_with_actions(summary: str, body: str, actions: list[tuple[str, str]],
     argv += [summary, body]
 
     def finished(*_args) -> None:
-        choice = bytes(proc.readAllStandardOutput()).decode(errors="replace").strip()
-        if proc in _pending:
-            _pending.remove(proc)
+        if proc not in _pending:
+            return  # cancelled (app quitting)
+        _pending.remove(proc)
+        try:
+            choice = bytes(proc.readAllStandardOutput()).decode(errors="replace").strip()
+        except RuntimeError:  # the process object is already gone
+            return
         if proc.exitCode() != 0 and not choice:
             log.debug("notify-send --action failed: %s", bytes(proc.readAllStandardError()).decode(errors="replace"))
         if choice in {name for name, _ in actions}:
@@ -113,3 +117,15 @@ def notify_with_actions(summary: str, body: str, actions: list[tuple[str, str]],
     proc.finished.connect(finished)
     _pending.append(proc)
     proc.start("notify-send", argv)
+
+
+def cancel_pending() -> None:
+    """Stop waiting for notification buttons (on quit). The notifications
+    themselves stay in the desktop's history."""
+    while _pending:
+        proc = _pending.pop()
+        try:
+            proc.kill()
+            proc.waitForFinished(500)
+        except RuntimeError:
+            pass

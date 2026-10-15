@@ -24,6 +24,7 @@ from pathlib import Path
 from typing import Any
 
 from .config import APP_ID
+from .i18n import _, ngettext
 
 log = logging.getLogger(__name__)
 
@@ -186,9 +187,9 @@ def summarize(records: list[Record], now: float | None = None) -> Summary:
 def format_minutes(minutes: float) -> str:
     minutes = int(round(minutes))
     if minutes < 60:
-        return f"{minutes}m"
+        return _("{m}m").format(m=minutes)
     h, m = divmod(minutes, 60)
-    return f"{h}h {m:02d}m"
+    return _("{h}h {m:02d}m").format(h=h, m=m)
 
 
 # --------------------------------------------------------------------------
@@ -200,6 +201,15 @@ class Mood:
     level: str  # overjoyed / happy / content / sulky / sad
     emoji: str
     reason: str
+    away_days: int = 0  # days since the last finished round (0 = today)
+
+    @property
+    def label(self) -> str:
+        """The level in the user's language."""
+        return {
+            "overjoyed": _("overjoyed"), "happy": _("happy"), "content": _("content"),
+            "sulky": _("sulky"), "sad": _("sad"),
+        }[self.level]
 
     @property
     def is_sulky(self) -> bool:
@@ -247,53 +257,64 @@ def mood(records: list[Record], now: float | None = None) -> Mood:
         score -= 10 * min(away_days - 1, 3)
     score = max(0, min(100, score))
 
-    reasons = []
+    reasons: list[str] = []
+
+    def reason(text: str, n: int) -> None:
+        reasons.append(text.format(n=n))
+
     if skipped_breaks:
-        reasons.append(f"skipped {skipped_breaks} break{'s' if skipped_breaks > 1 else ''} today")
+        reason(ngettext("skipped {n} break today", "skipped {n} breaks today", skipped_breaks), skipped_breaks)
     if worked_breaks:
-        reasons.append(f"worked through {worked_breaks} break{'s' if worked_breaks > 1 else ''} today")
+        reason(ngettext("worked through {n} break today", "worked through {n} breaks today", worked_breaks),
+               worked_breaks)
     if away_days >= 2:
-        reasons.append(f"hasn't seen you in {away_days} days")
+        reason(ngettext("hasn't seen you in {n} day", "hasn't seen you in {n} days", away_days), away_days)
     if abandoned:
-        reasons.append(f"{abandoned} unfinished round{'s' if abandoned > 1 else ''} today")
+        reason(ngettext("{n} unfinished round today", "{n} unfinished rounds today", abandoned), abandoned)
     if done:
-        reasons.append(f"{done} round{'s' if done > 1 else ''} done today")
+        reason(ngettext("{n} round done today", "{n} rounds done today", done), done)
     if streak >= 2:
-        reasons.append(f"{streak}-day streak")
+        reason(ngettext("{n}-day streak", "{n}-day streak", streak), streak)
     if pets:
-        reasons.append(f"got {pets} pet{'s' if pets > 1 else ''} today")
+        reason(ngettext("got {n} pet today", "got {n} pets today", pets), pets)
     if not reasons:
-        reasons.append("ready to work with you")
+        reasons.append(_("ready to work with you"))
 
     level, emoji = next((name, e) for floor, name, e in _LEVELS if score >= floor)
-    return Mood(score, level, emoji, ", ".join(reasons[:2]))
+    return Mood(score, level, emoji, _(", ").join(reasons[:2]), away_days=away_days)
 
 
 def _rounds(n: int) -> str:
-    return f"{n} round{'s' if n != 1 else ''}"
+    return ngettext("{n} round", "{n} rounds", n).format(n=n)
 
 
 def stats_text(records: list[Record], pet_name: str, now: float | None = None) -> str:
     """Plain-text report for `pomodoro-pet --stats`."""
     s = summarize(records, now)
     m = mood(records, now)
+    rows = [
+        (_("Today"), _("{rounds} · {time} focused").format(
+            rounds=_rounds(s.today_rounds), time=format_minutes(s.today_minutes))),
+        (_("Streak"), ngettext("{n} day (best {best})", "{n} days (best {best})", s.streak).format(
+            n=s.streak, best=s.best_streak)),
+        (_("This week"), format_minutes(s.week_minutes)),
+        (_("All time"), f"{_rounds(s.total_rounds)} · {format_minutes(s.total_minutes)}"),
+    ]
+    width = max(len(label) for label, _value in rows) + 2
     lines = [
-        f"{pet_name} is {m.level} {m.emoji} ({m.reason})",
+        _("{name} is {mood} {emoji} ({reason})").format(name=pet_name, mood=m.label, emoji=m.emoji, reason=m.reason),
         "",
-        f"Today      {_rounds(s.today_rounds)} · {format_minutes(s.today_minutes)} focused",
-        f"Streak     {s.streak} day{'s' if s.streak != 1 else ''} (best {s.best_streak})",
-        f"This week  {format_minutes(s.week_minutes)}",
-        f"All time   {_rounds(s.total_rounds)} · {format_minutes(s.total_minutes)}",
+        *(label.ljust(width) + value for label, value in rows),
         "",
-        "Last 7 days",
+        _("Last 7 days"),
     ]
     series = week_series(records, now)
-    peak = max((m for _, m in series), default=0) or 1
+    peak = max((minutes for _day, minutes in series), default=0) or 1
     for d, minutes in series:
         bar = "█" * round(20 * minutes / peak)
         lines.append(f"  {d.strftime('%a %d')}  {bar:<20} {format_minutes(minutes)}")
     top = top_intentions(records, now)
     if top:
-        lines += ["", "Top focus this week"]
+        lines += ["", _("Top focus this week")]
         lines += [f"  {format_minutes(minutes):>7}  {text}" for text, minutes in top]
     return "\n".join(lines)

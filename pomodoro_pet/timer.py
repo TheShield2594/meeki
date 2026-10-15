@@ -25,6 +25,8 @@ from collections.abc import Callable
 
 from PySide6.QtCore import QObject, QTimer, Signal
 
+from .i18n import _
+
 # A phase that ended more than this many seconds before we noticed counts as
 # "you were away" (suspend, app not running).
 AWAY_THRESHOLD = 60.0
@@ -53,7 +55,7 @@ class Phase(enum.Enum):
 
     @property
     def label(self) -> str:
-        return {"focus": "Focus", "short_break": "Short break", "long_break": "Long break"}[self.value]
+        return {"focus": _("Focus"), "short_break": _("Short break"), "long_break": _("Long break")}[self.value]
 
     @property
     def is_break(self) -> bool:
@@ -206,6 +208,23 @@ class PomodoroTimer(QObject):
         if self.state is State.PAUSED:
             self._remaining = max(0.0, self._remaining - max(0.0, seconds))
             self._emit_tick(force=True)
+
+    def adjust(self, seconds: float) -> None:
+        """Add (or with a negative number, take) time from the current phase.
+        Never goes below one second left; does nothing in overtime or when idle."""
+        if self.in_overtime or self.state not in (State.RUNNING, State.PAUSED):
+            return
+        left = self.remaining()
+        new_left = max(1.0, left + seconds)
+        delta = new_left - left
+        if self.state is State.RUNNING and self._deadline is not None:
+            self._deadline += delta
+        else:
+            self._remaining = new_left
+        self._phase_total = max(1.0, self._phase_total + delta)
+        if new_left > self.warn_seconds:
+            self._warned = False  # re-arm the one-minute warning if you added time
+        self._emit_tick(force=True)
 
     def toggle(self) -> None:
         if self.state is State.RUNNING:

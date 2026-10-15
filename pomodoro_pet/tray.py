@@ -17,6 +17,7 @@ from PySide6.QtCore import QObject, QRect, Qt, Signal
 from PySide6.QtGui import QColor, QFont, QIcon, QPainter, QPixmap
 from PySide6.QtWidgets import QSystemTrayIcon
 
+from .i18n import _
 from .timer import PomodoroTimer, State, format_mmss
 
 
@@ -45,9 +46,9 @@ class TrayController(QObject):
         if not force and not self.icon.isVisible():
             return
         text = format_mmss(remaining)
-        status = "Done!" if self.timer.state is State.COMPLETE else f"{self.timer.phase.label}: {text}"
+        status = _("Done!") if self.timer.state is State.COMPLETE else f"{self.timer.phase.label}: {text}"
         if self.timer.in_overtime:
-            status = f"Overtime: +{text}"
+            status = _("Overtime: +{time}").format(time=text)
         self.icon.setToolTip(f"Pomodoro Pet — {status}")
         self.icon.setIcon(self._render(text.split(":")[0]))
 

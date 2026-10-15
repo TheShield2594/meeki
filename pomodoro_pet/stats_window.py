@@ -3,11 +3,22 @@ and the week's top focus intentions."""
 
 from __future__ import annotations
 
-from PySide6.QtCore import QPointF, QRectF, Qt
-from PySide6.QtGui import QColor, QFont, QPainter, QPainterPath, QPalette
+from PySide6.QtCore import QDate, QLocale, QPointF, QRectF, Qt
+from PySide6.QtGui import QColor, QFont, QKeySequence, QPainter, QPainterPath, QPalette, QShortcut
 from PySide6.QtWidgets import QFrame, QGridLayout, QLabel, QToolTip, QVBoxLayout, QWidget
 
 from .history import Mood, Record, format_minutes, summarize, top_intentions, week_series
+from .i18n import _, ngettext
+
+
+def _day_name(day, short: bool = False) -> str:
+    """Weekday name in the desktop's language."""
+    return QLocale().dayName(day.isoweekday(), QLocale.ShortFormat if short else QLocale.LongFormat)
+
+
+def _day_long(day) -> str:
+    return QLocale().toString(QDate(day.year, day.month, day.day), "dddd d MMMM")
+
 
 # Focus red; validated (dataviz palette check) against light and dark surfaces.
 BAR_COLOR = QColor("#e2574c")
@@ -27,8 +38,8 @@ class WeekChart(QWidget):
 
     def set_series(self, series) -> None:
         self.series = list(series)
-        desc = "; ".join(f"{d.strftime('%A')}: {format_minutes(m)}" for d, m in self.series)
-        self.setAccessibleName("Minutes focused per day, last 7 days")
+        desc = "; ".join(f"{_day_name(d)}: {format_minutes(m)}" for d, m in self.series)
+        self.setAccessibleName(_("Minutes focused per day, last 7 days"))
         self.setAccessibleDescription(desc)
         self.update()
 
@@ -76,7 +87,7 @@ class WeekChart(QWidget):
 
             is_today = i == n - 1
             p.setPen(self._ink(muted=not is_today))
-            day_label = "Today" if is_today else day.strftime("%a")
+            day_label = _("Today") if is_today else _day_name(day, short=True)
             label_rect = QRectF(cx - slot / 2, plot.bottom() + 4, slot, label_h)
             p.drawText(label_rect, Qt.AlignHCenter | Qt.AlignTop, day_label)
             if (is_today or i == best_i) and minutes > 0:  # selective direct labels
@@ -93,7 +104,7 @@ class WeekChart(QWidget):
             if rect.contains(pos):
                 QToolTip.showText(
                     event.globalPosition().toPoint(),
-                    f"{day.strftime('%A %d %b')}\n{format_minutes(minutes)} focused",
+                    _day_long(day) + "\n" + _("{time} focused").format(time=format_minutes(minutes)),
                     self,
                 )
                 return
@@ -135,7 +146,7 @@ class StatsWindow(QWidget):
     def __init__(self, pet_name: str):
         super().__init__(None, Qt.Window)
         self.pet_name = pet_name
-        self.setWindowTitle("Pomodoro Pet — Stats")
+        self.setWindowTitle(_("Pomodoro Pet — Stats"))
         self.setStyleSheet(STYLE)
         self.setMinimumWidth(440)
 
@@ -144,18 +155,18 @@ class StatsWindow(QWidget):
         self.mood_reason = QLabel()
         self.mood_reason.setObjectName("muted")
 
-        self.today, self.streak = _Tile("Today"), _Tile("Streak")
-        self.week, self.total = _Tile("This week"), _Tile("All time")
+        self.today, self.streak = _Tile(_("Today")), _Tile(_("Streak"))
+        self.week, self.total = _Tile(_("This week")), _Tile(_("All time"))
         tiles = QGridLayout()
         tiles.setSpacing(8)
         for i, tile in enumerate((self.today, self.streak, self.week, self.total)):
             tiles.addWidget(tile, 0, i)
 
-        chart_heading = QLabel("Focus time, last 7 days")
+        chart_heading = QLabel(_("Focus time, last 7 days"))
         chart_heading.setObjectName("heading")
         self.chart = WeekChart()
 
-        top_heading = QLabel("Top focus this week")
+        top_heading = QLabel(_("Top focus this week"))
         top_heading.setObjectName("heading")
         self.top = QGridLayout()
         self.top.setHorizontalSpacing(12)
@@ -173,15 +184,25 @@ class StatsWindow(QWidget):
         layout.addWidget(self.chart)
         layout.addWidget(top_heading)
         layout.addLayout(self.top)
+        QShortcut(QKeySequence(Qt.Key_Escape), self, activated=self.close)
 
     def refresh(self, records: list[Record], mood: Mood, now: float | None = None) -> None:
         s = summarize(records, now)
-        self.mood.setText(f"{self.pet_name} is {mood.level} {mood.emoji}")
+        self.mood.setText(_("{name} is {mood} {emoji}").format(name=self.pet_name, mood=mood.label, emoji=mood.emoji))
         self.mood_reason.setText(mood.reason.capitalize())
-        self.today.set(str(s.today_rounds), f"rounds · {format_minutes(s.today_minutes)}")
-        self.streak.set(f"{s.streak}d", f"best {s.best_streak}d")
+        self.today.set(
+            str(s.today_rounds),
+            ngettext("round · {time}", "rounds · {time}", s.today_rounds).format(time=format_minutes(s.today_minutes)),
+        )
+        self.streak.set(
+            ngettext("{n} day", "{n} days", s.streak).format(n=s.streak),
+            _("best {n}").format(n=s.best_streak),
+        )
         self.week.set(format_minutes(s.week_minutes), "focused")
-        self.total.set(str(s.total_rounds), f"rounds · {format_minutes(s.total_minutes)}")
+        self.total.set(
+            str(s.total_rounds),
+            ngettext("round · {time}", "rounds · {time}", s.total_rounds).format(time=format_minutes(s.total_minutes)),
+        )
         self.chart.set_series(week_series(records, now))
         while self.top.count():
             item = self.top.takeAt(0)
@@ -189,7 +210,7 @@ class StatsWindow(QWidget):
                 item.widget().deleteLater()
         top = top_intentions(records, now)
         if not top:
-            hint = QLabel("Type what you're working on in the popover and it shows up here.")
+            hint = QLabel(_("Type what you're working on in the popover and it shows up here."))
             hint.setObjectName("muted")
             hint.setWordWrap(True)
             self.top.addWidget(hint, 0, 0, 1, 2)

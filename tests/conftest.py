@@ -21,6 +21,7 @@ def controller(tmp_path, monkeypatch, qapp):
     from pomodoro_pet.config import Config
 
     c = Controller(qapp, Config().load())
+    c.cfg["notifications"] = c.cfg["sound"] = False  # no real popups or beeps from tests
     yield c
     c.shutdown()
     c.pet.close()
