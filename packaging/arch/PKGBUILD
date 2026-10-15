@@ -29,7 +29,10 @@ prepare() {
   mkdir -p "$srcdir/$pkgname"
   local root
   root=$(_srcroot)
-  cp -a "$root"/{pyproject.toml,README.md,LICENSE,pomodoro_pet,assets,packaging,tests,tools,po} "$srcdir/$pkgname/"
+  cp -a "$root"/{pyproject.toml,README.md,LICENSE,pomodoro_pet,assets,tests,tools,po} "$srcdir/$pkgname/"
+  # not all of packaging/: makepkg's own src/ and pkg/ live in packaging/arch/
+  mkdir -p "$srcdir/$pkgname/packaging"
+  cp -a "$root"/packaging/{install-files.sh,pomodoro-pet.desktop,kwin} "$srcdir/$pkgname/packaging/"
 }
 
 build() {

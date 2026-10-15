@@ -9,8 +9,8 @@ jobs:
     name: Lint & tests (Ubuntu, PySide6 wheels)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
       - name: System libraries for Qt offscreen + D-Bus tools for the end-to-end tests
@@ -39,7 +39,7 @@ jobs:
         run: |
           pacman -Syu --noconfirm --needed git python pyside6 python-build python-installer \
             python-setuptools python-wheel python-pytest dbus glib2 libnotify gettext
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: makepkg (runs the test suite in check())
         run: |
           useradd -m builder
