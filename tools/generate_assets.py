@@ -139,9 +139,11 @@ def eyes(p, lx, rx_, y, mode):
         return
     dy = 3 if mode in ("down", "side") else 0
     dx = -6 if mode == "side" else 0  # "side": looking away, unimpressed
+    look = {"left": -3.5, "right": 3.5}.get(mode, 0.0)  # glancing around
     for x in (lx, rx_):
+        x += look
         ellipse(p, x, y, 9.5, 10.5, INK)
-        ellipse(p, x + 3 + dx, y - 4 + dy, 3.4, 3.4, QColor("white"))
+        ellipse(p, x + 3 + dx + look * 0.6, y - 4 + dy, 3.4, 3.4, QColor("white"))
         ellipse(p, x - 3, y + 4 + dy, 1.6, 1.6, QColor(255, 255, 255, 180))
     if mode == "down":  # sleepy-focused lids
         for x in (lx, rx_):
@@ -201,6 +203,11 @@ def face(p, cx, cy, eye_mode="open", mouth="smile", glasses=False):
         p.drawLine(QPointF(cx, cy + 21), QPointF(cx, cy + 25))
         p.drawArc(QRectF(cx - 10, cy + 19, 10, 10), 200 * 16, 140 * 16)
         p.drawArc(QRectF(cx, cy + 19, 10, 10), 200 * 16, 140 * 16)
+    elif mouth in ("yawn1", "yawn2"):
+        h = 14 if mouth == "yawn1" else 22
+        p.setBrush(QColor("#7a2d3a"))
+        p.drawEllipse(QRectF(cx - h * 0.45, cy + 21, h * 0.9, h))
+        ellipse(p, cx, cy + 21 + h * 0.78, h * 0.28, h * 0.16, TONGUE)
     elif mouth == "frown":
         p.drawLine(QPointF(cx, cy + 21), QPointF(cx, cy + 25))
         p.drawArc(QRectF(cx - 9, cy + 25, 18, 10), 30 * 16, 120 * 16)
@@ -247,6 +254,12 @@ def sitting(p, *, lift=0.0, breathe=0.0, tail_angle=0.0, tilt=0.0, eye_mode="ope
     if paws == "up":  # cheering, paws in the air beside the head
         paw(p, 52, 112 + y, 61, 14, 14)
         paw(p, 204, 112 + y, 62, 14, 14)
+    elif paws == "stretch":  # stretching up high
+        paw(p, 70, 70 + y, 61, 14, 14)
+        paw(p, 186, 70 + y, 62, 14, 14)
+    elif isinstance(paws, tuple) and paws[0] == "scratch":  # hind paw scratching behind the ear
+        paw(p, 104, 226 + y, 61)
+        paw(p, 184, 128 + y + paws[1], 63, 15, 12)
 
 
 def draw_laptop(p, typing_frame):
@@ -358,12 +371,45 @@ def frame_sulky(p, i):
     rain_cloud(p, i)
 
 
+# ---- idle animations (one-shots) and petting ----------------------------
+def frame_look(p, i):
+    pose = [("open", 0), ("left", -6), ("left", -6), ("open", 0), ("right", 6), ("right", 6)][i]
+    sitting(p, eye_mode=pose[0], tilt=pose[1], tail_angle=[0, -10, -10, 0, 10, 10][i])
+
+
+def frame_yawn(p, i):
+    mouth = ["smile", "yawn1", "yawn2", "yawn2", "yawn1"][i]
+    sitting(p, eye_mode="open" if i == 0 else "closed", mouth=mouth, ear_flap=[0, -6, -10, -10, -6][i],
+            tilt=[0, -3, -5, -5, -3][i])
+
+
+def frame_scratch(p, i):
+    sitting(p, eye_mode="happy", mouth="smile", tilt=9, tail_angle=[-15, 15][i % 2], paws=("scratch", [0, -10][i % 2]))
+
+
+def frame_stretch(p, i):
+    pose = [("down", "closed", "smile", 0), ("stretch", "closed", "yawn1", 4), ("stretch", "closed", "yawn2", 7),
+            ("stretch", "closed", "yawn1", 4), ("down", "happy", "smile", 0)][i]
+    sitting(p, paws=pose[0], eye_mode=pose[1], mouth=pose[2], lift=pose[3], breathe=pose[3] / 2)
+
+
+def frame_petted(p, i):
+    sitting(p, eye_mode="happy", mouth="open", tilt=[8, 10, 8, 10][i], ear_flap=[4, 8, 4, 8][i],
+            tail_angle=[-28, 28, -28, 28][i], breathe=1)
+
+
 STATES = {
     "idle": (frame_idle, 8),
     "focusing": (frame_focusing, 4),
     "break": (frame_break, 4),
     "celebrating": (frame_celebrating, 6),
     "sulky": (frame_sulky, 4),  # idle pose when the pup's mood is low
+    "petted": (frame_petted, 4),
+    # one-shot idle animations
+    "look": (frame_look, 6),
+    "yawn": (frame_yawn, 5),
+    "scratch": (frame_scratch, 8),
+    "stretch": (frame_stretch, 5),
 }
 
 

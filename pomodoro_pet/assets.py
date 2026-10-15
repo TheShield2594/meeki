@@ -12,7 +12,9 @@ from PySide6.QtGui import QColor, QPainter, QPixmap
 log = logging.getLogger(__name__)
 
 STATES = ("idle", "focusing", "break", "celebrating")
-OPTIONAL_STATES = ("sulky",)  # idle pose for a low mood; falls back to "idle"
+# Optional: "sulky" idle pose for a low mood, "petted", and one-shot idle
+# animations. Missing ones are simply not used.
+OPTIONAL_STATES = ("sulky", "petted", "look", "yawn", "scratch", "stretch")
 
 
 def assets_dir() -> Path | None:

@@ -233,6 +233,7 @@ def mood(records: list[Record], now: float | None = None) -> Mood:
     done = sum(1 for r in todays if _completed(r))
     skipped_breaks = sum(1 for r in todays if r.get("type", "").endswith("break") and r.get("outcome") == "skipped")
     worked_breaks = sum(1 for r in todays if worked_through_break(r))
+    pets = sum(1 for r in todays if r.get("type") == "pet")
     abandoned = sum(
         1 for r in todays if _is_focus(r) and r.get("outcome") in ("skipped", "reset") and r.get("seconds", 0) >= 60
     )
@@ -241,6 +242,7 @@ def mood(records: list[Record], now: float | None = None) -> Mood:
     away_days = (today - max(days)).days if days else 0
 
     score = 50 + 8 * min(done, 5) + 2 * min(streak, 10) - 12 * skipped_breaks - 8 * worked_breaks - 6 * abandoned
+    score += 3 * min(pets, 3)  # a few pets help a little, they don't replace focus
     if away_days >= 2:
         score -= 10 * min(away_days - 1, 3)
     score = max(0, min(100, score))
@@ -258,6 +260,8 @@ def mood(records: list[Record], now: float | None = None) -> Mood:
         reasons.append(f"{done} round{'s' if done > 1 else ''} done today")
     if streak >= 2:
         reasons.append(f"{streak}-day streak")
+    if pets:
+        reasons.append(f"got {pets} pet{'s' if pets > 1 else ''} today")
     if not reasons:
         reasons.append("ready to work with you")
 

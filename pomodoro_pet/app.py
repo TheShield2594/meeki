@@ -54,6 +54,11 @@ class Controller:
         self.pet.clicked.connect(lambda: self.popover.popup_near(self.pet, self.pet.interaction_rect()))
         self.pet.quit_requested.connect(self.quit)
         self.pet.moved.connect(self._remember_position)
+        self.pet.petted.connect(self._on_petted)
+        self.pet.idle_animations = cfg["idle_animations"]
+        self._last_pet_logged = 0.0
+        self._last_pet_said = 0.0
+        self._pet_hush_round = None
         self.popover.options_changed.connect(self.set_options)
         self.popover.minimize_requested.connect(self.minimize_to_tray)
         self.popover.intention_changed.connect(self.set_intention)
@@ -186,6 +191,8 @@ class Controller:
         t.flow = c["flow_mode"]
         t.warn_seconds = 60 if c["minute_warning"] else 0
         self.activity.away_after = c["idle_minutes"] * 60
+        if "idle_animations" in keys:
+            self.pet.set_idle_animations(c["idle_animations"])
         if "scale" in keys:
             self.pet.set_scale(c["scale"])
         if "sprite_dir" in keys:
@@ -301,6 +308,34 @@ class Controller:
         self.popover.set_intention(text)
         self._save_session()
         self._update_tooltip()
+
+    def _on_petted(self) -> None:
+        import random
+
+        from .behaviour import PET_LINES
+
+        now = time.time()
+        if now - self._last_pet_logged >= 60:  # one "pet" per minute in the log, however long you rub
+            self._last_pet_logged = now
+            self.history.append({"type": "pet", "end": now, "seconds": 0})
+            was_sulky = self.mood.is_sulky
+            self._refresh_mood(react=False)
+            if was_sulky and not self.mood.is_sulky:
+                self.say("Okay… I feel better now 🥺💕")
+                self._last_pet_said = now
+                return
+        if now - self._last_pet_said < 15:
+            return
+        self._last_pet_said = now
+        t = self.timer
+        if t.state is State.RUNNING and t.phase is Phase.FOCUS:
+            if self._pet_hush_round != t.round:  # once per round: don't distract you
+                self._pet_hush_round = t.round
+                self.say("Hehe! Okay, back to work 🐾")
+        elif self.mood.is_sulky:
+            self.say("Hmph… okay, that's nice 🥺")
+        else:
+            self.say(random.choice(PET_LINES))
 
     def _on_phase_ended(self, phase, seconds: float, outcome: str, round_: int) -> None:
         from PySide6.QtCore import QTimer

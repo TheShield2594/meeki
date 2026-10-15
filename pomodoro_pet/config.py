@@ -34,6 +34,7 @@ DEFAULTS: dict[str, Any] = {
     "sound_file": None,  # None -> bundled chime
     # Pet window
     "pet_name": "Biscuit",
+    "idle_animations": True,  # look around, yawn, scratch, stretch, nap when nothing's going on
     "position": None,  # {"x": int, "y": int} or None for "bottom-right of primary screen"
     "scale": 1.0,
     "sprite_dir": None,  # optional override directory with custom sprites

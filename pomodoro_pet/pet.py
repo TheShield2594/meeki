@@ -9,13 +9,18 @@ from PySide6.QtCore import QPoint, QPointF, QRect, QRectF, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QFont, QPainter, QPainterPath, QPen, QRegion
 from PySide6.QtWidgets import QApplication, QWidget
 
+from .behaviour import IdleLife, RubDetector
 from .timer import Phase, PomodoroTimer, State, format_mmss
 from .wayland import running_on_wayland
 
 WINDOW_TITLE = "Pomodoro Pet"
 
 # frames per second for each animation
-FPS = {"idle": 3, "focusing": 4, "break": 2, "celebrating": 8, "sulky": 3}
+FPS = {
+    "idle": 3, "focusing": 4, "break": 2, "celebrating": 8, "sulky": 3,
+    "petted": 6, "look": 3, "yawn": 4, "scratch": 6, "stretch": 3,
+}
+PET_SECONDS = 2.0  # how long the petted pose lasts after the last rub
 
 OVERTIME_COLOR = QColor("#8e24aa")
 PHASE_COLORS = {
@@ -28,6 +33,7 @@ PHASE_COLORS = {
 class PetWindow(QWidget):
     clicked = Signal()
     quit_requested = Signal()
+    petted = Signal()  # a petting session started
     moved = Signal(int, int)  # global position, only emitted where it is known (X11/XWayland)
 
     def __init__(self, timer: PomodoroTimer, sprites: dict, scale: float = 1.0):
@@ -61,6 +67,15 @@ class PetWindow(QWidget):
         self._shake_until = 0.0
         self._shake = QTimer(self, interval=33)
         self._shake.timeout.connect(self._shake_step)
+        # petting + idle life
+        self._rub = RubDetector()
+        self._petting_until = 0.0
+        self._action: str | None = None  # one-shot idle animation being played
+        self.idle_animations = True
+        self.life = IdleLife()
+        self._life_timer = QTimer(self, interval=2000)
+        self._life_timer.timeout.connect(self._life_tick)
+        self._life_timer.start()
 
         self._anim = QTimer(self)
         self._anim.timeout.connect(self._advance)
@@ -68,7 +83,7 @@ class PetWindow(QWidget):
         self._move_debounce.timeout.connect(lambda: self.moved.emit(self.x(), self.y()))
 
         timer.tick.connect(self._on_tick)
-        timer.state_changed.connect(lambda *_: self._refresh_state())
+        timer.state_changed.connect(lambda *_: (self.life.touch(), self._refresh_state()))
         timer.phase_changed.connect(lambda *_: self._refresh_state())
         self._refresh_state()
 
@@ -128,15 +143,64 @@ class PetWindow(QWidget):
             self.mood_level = level
             self._refresh_state()
 
-    def _target_state(self) -> str:
-        if time.monotonic() < self._celebrate_until:
-            return "celebrating"
+    # ---- petting & idle life -------------------------------------------
+    @property
+    def being_petted(self) -> bool:
+        return time.monotonic() < self._petting_until
+
+    def _pet(self) -> None:
+        started = not self.being_petted
+        self._petting_until = time.monotonic() + PET_SECONDS
+        self.life.touch()
+        if started:
+            self.petted.emit()
+            self._refresh_state()
+        QTimer.singleShot(int(PET_SECONDS * 1000) + 50, self._refresh_state)
+
+    def play(self, action: str) -> None:
+        """Play a one-shot animation (if those frames exist), then carry on."""
+        if self.sprites.get(action):
+            self._action = action
+            self._refresh_state()
+
+    def set_idle_animations(self, enabled: bool) -> None:
+        self.idle_animations = enabled
+        if not enabled:
+            self._action = None
+            self.life.touch()  # wakes it from a nap too
+            self._refresh_state()
+
+    def _life_tick(self) -> None:
+        base = self._base_state()
+        idle = self.idle_animations and base in ("idle", "sulky") and self._action is None and not self.being_petted
+        available = {name for name in IdleLife.ACTIONS if self.sprites.get(name)} if base == "idle" else set()
+        decision = self.life.tick(idle, available)
+        if decision == "nap":
+            self._refresh_state()
+        elif decision:
+            self.play(decision)
+
+    # ---- state & animation ---------------------------------------------
+    def _base_state(self) -> str:
         t = self.timer
         if t.state in (State.RUNNING, State.PAUSED):
             return "break" if t.phase.is_break else "focusing"
         if self.mood_level in ("sulky", "sad") and self.sprites.get("sulky"):
             return "sulky"
         return "idle"
+
+    def _target_state(self) -> str:
+        if time.monotonic() < self._celebrate_until:
+            return "celebrating"
+        base = self._base_state()
+        if self.being_petted:
+            return "petted" if self.sprites.get("petted") else base
+        if base in ("idle", "sulky"):
+            if self.life.napping:
+                return "break"  # curled up for a nap
+            if self._action:
+                return self._action
+        return base
 
     def _refresh_state(self) -> None:
         state = self._target_state()
@@ -152,6 +216,10 @@ class PetWindow(QWidget):
 
     def _advance(self) -> None:
         frames = self.sprites.get(self._anim_state) or [None]
+        if self._action and self._anim_state == self._action and self._frame + 1 >= len(frames):
+            self._action = None  # one-shot finished
+            self._refresh_state()
+            return
         self._frame = (self._frame + 1) % len(frames)
         self.update()
 
@@ -168,18 +236,19 @@ class PetWindow(QWidget):
         if frames:
             pm = frames[self._frame % len(frames)]
             p.drawPixmap(self.sprite_rect.translated(round(self._shake_offset()), 0), pm)
-        if self._anim_state == "idle" and self.mood_level in ("happy", "overjoyed"):
-            self._paint_hearts(p)
+        if self._anim_state == "petted":
+            self._paint_hearts(p, [(0.0, 0.80), (0.33, 0.18), (0.66, 0.55)])
+        elif self._anim_state == "idle" and self.mood_level in ("happy", "overjoyed"):
+            self._paint_hearts(p, [(0.0, 0.80)] + ([(0.5, 0.16)] if self.mood_level == "overjoyed" else []))
 
         self._paint_bubble(p)
         self._paint_close(p)
         p.end()
 
-    def _paint_hearts(self, p: QPainter) -> None:
-        """Hearts floating up beside the pup's head when it's happy."""
+    def _paint_hearts(self, p: QPainter, hearts: list[tuple[float, float]]) -> None:
+        """Hearts floating up beside the pup's head: (phase offset, x position) each."""
         r = QRectF(self.sprite_rect)
-        frames = max(1, len(self.sprites.get("idle") or [1]))
-        hearts = [(0.0, 0.80)] + ([(0.5, 0.16)] if self.mood_level == "overjoyed" else [])
+        frames = max(1, len(self.sprites.get(self._anim_state) or [1]))
         for offset, x_frac in hearts:
             t = ((self._frame / frames) + offset) % 1.0
             size = r.width() * (0.09 + 0.03 * t)
@@ -274,16 +343,22 @@ class PetWindow(QWidget):
     # ---- mouse ---------------------------------------------------------
     def enterEvent(self, _event) -> None:
         self._hover = True
+        if self.life.touch():  # you woke it from a nap
+            self._refresh_state()
+            self.play("yawn")
         self.update(self.close_rect.adjusted(-2, -2, 2, 2))
 
     def leaveEvent(self, _event) -> None:
         self._hover = self._hover_close = False
+        self._rub.reset()
+        self.unsetCursor()
         self.update(self.close_rect.adjusted(-2, -2, 2, 2))
 
     def mousePressEvent(self, event) -> None:
         if event.button() != Qt.LeftButton:
             return
         pos = event.position().toPoint()
+        self.life.touch()
         self._press_pos = pos
         self._press_on_close = self.close_rect.adjusted(-2, -2, 2, 2).contains(pos)
         self._dragging = False
@@ -296,6 +371,14 @@ class PetWindow(QWidget):
             self._hover_close = over_close
             self.update(self.close_rect.adjusted(-2, -2, 2, 2))
 
+        if not event.buttons():
+            # Hovering: rubbing back and forth over the pup is petting.
+            on_pup = self.sprite_rect.contains(pos)
+            self.setCursor(Qt.OpenHandCursor if on_pup else Qt.ArrowCursor)
+            if on_pup and self._rub.feed(pos.x(), time.monotonic()):
+                self._pet()
+            elif not on_pup:
+                self._rub.reset()
         if self._press_pos is None or not (event.buttons() & Qt.LeftButton):
             return
         if self._dragging:

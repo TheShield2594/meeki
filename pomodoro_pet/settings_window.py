@@ -231,9 +231,13 @@ class SettingsWindow(QWidget):
         form.addRow("Custom sprites", sprites)
         return _page(
             form,
+            self._check("idle_animations", "Idle animations and naps",
+                        "When the timer isn't running the pup looks around, yawns, scratches and stretches, "
+                        "and naps after 5 quiet minutes"),
+            _hint("Pet the pup by rubbing the pointer back and forth over it."),
             _hint("A sprite folder has one subfolder of PNG frames (or one sprite-sheet PNG) per state: "
-                  "idle, focusing, break, celebrating and optionally sulky. Missing states use the "
-                  "bundled pup."),
+                  "idle, focusing, break, celebrating, and optionally sulky, petted, look, yawn, "
+                  "scratch and stretch. Missing states use the bundled pup."),
         )
 
     def _sound_page(self) -> QWidget:

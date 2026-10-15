@@ -3,24 +3,13 @@
 import json
 
 import pytest
-from PySide6.QtWidgets import QApplication
-
-from pomodoro_pet.config import Config
 
 
 @pytest.fixture
-def controller(tmp_path, monkeypatch):
-    for var, sub in (("XDG_CONFIG_HOME", "config"), ("XDG_STATE_HOME", "state"), ("XDG_DATA_HOME", "data")):
-        monkeypatch.setenv(var, str(tmp_path / sub))
-    monkeypatch.setenv("DBUS_SESSION_BUS_ADDRESS", "unix:path=/nonexistent")  # keep off the real bus
-    from pomodoro_pet.app import Controller
-
-    c = Controller(QApplication.instance(), Config().load())
-    c.show_settings()
-    yield c
-    c.shutdown()
-    c.settings_window.close()
-    c.pet.close()
+def controller(controller):
+    controller.show_settings()
+    yield controller
+    controller.settings_window.close()
 
 
 def test_settings_window_shows_current_values(controller):

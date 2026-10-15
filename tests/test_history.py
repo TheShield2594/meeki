@@ -104,3 +104,12 @@ def test_working_through_a_break_upsets_the_pup():
     rested = dict(brk(0), active_seconds=30)
     assert mood([focus(0), rested], NOW).score > mood([focus(0), worked], NOW).score
     assert "worked through 1 break today" in mood([focus(0), worked], NOW).reason
+
+
+def test_pets_help_a_little_but_are_capped():
+    pet = {"type": "pet", "end": at(0), "seconds": 0}
+    base = mood([], NOW).score
+    assert mood([pet], NOW).score == base + 3
+    assert mood([pet] * 10, NOW).score == base + 9  # capped at three
+    assert "got 1 pet today" in mood([pet], NOW).reason
+    assert summarize([pet], NOW).today_minutes == 0  # pets aren't focus time

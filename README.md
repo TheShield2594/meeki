@@ -41,7 +41,10 @@ with a pink bow.
 - **Break enforcement:** keep working during a break and the pup wiggles and
   nags you, or in *Dim the screen* mode a full-screen break reminder appears
   with snooze and skip
-- **A pup with moods:** Biscuit (rename it in the config) cheers up as you
+- **Petting and idle life:** rub the pointer back and forth over the pup to
+  pet it. When the timer's not running it looks around, yawns, scratches and
+  stretches, and naps if nothing happens for a while
+- **A pup with moods:** Biscuit (rename it in Settings) cheers up as you
   finish rounds and build streaks, floats hearts when happy, and sulks under a
   rain cloud if you skip or work through breaks, abandon rounds or stay away
   for days
@@ -125,6 +128,7 @@ Optional dependencies: `libnotify` (notifications), `pipewire` or `libpulse`
 | See stats | **Stats** button in the popover |
 | Change settings | **Settings** button in the popover, the launcher's right-click menu, or `pomodoro-pet --settings` |
 | Check status and mood | hover the pup |
+| Pet the pup | rub the pointer back and forth over it (no click) |
 | Quit | the small **×** at the top-left (shows clearly on hover) |
 
 While the popover is open you can change durations. Changes to a running phase
@@ -284,6 +288,7 @@ Biscuit's mood comes from your history, not from a random roll:
 |---|---|
 | finishing focus rounds today | skipping a break |
 | keeping a day streak | abandoning a round (skip/reset after a minute or more) |
+| being petted (a little, up to three pets a day count) | |
 | | working through most of a break |
 | | not seeing you for two days or more |
 
@@ -293,6 +298,25 @@ The pup also comments on what just happened in a little speech tooltip. The
 popover and the hover tooltip show the current mood and why. The mood is
 checked every 10 minutes too, so a new day or a long absence shows up without
 any action from you.
+
+### Petting and idle animations
+
+![Petted, look, yawn, scratch, stretch, nap](docs/pet-life.png)
+
+- **Petting:** move the pointer back and forth over the pup, as if scratching
+  it, without clicking. The cursor turns into an open hand over the pup. It
+  leans in with happy eyes, its tongue out and a burst of hearts, and says
+  something sweet. During a focus round it giggles once and tells you to get
+  back to work. A sulky pup grumbles, but petting cheers it up a bit. Up to
+  three pets a day count toward its mood (one per minute of petting at most),
+  so petting can't replace actual focus.
+- **Idle animations:** while the timer isn't running, every 25–70 seconds the
+  pup looks around, yawns, scratches behind its ear or has a big stretch.
+- **Naps:** after 5 minutes without a timer or any interaction, it curls up
+  and sleeps. Hover over it to wake it with a yawn, or start the timer.
+
+Turn idle animations and naps off in *Settings → Pet* (`"idle_animations"`).
+Petting always works.
 
 ## Settings
 
@@ -308,7 +332,7 @@ Settings.
 |---|---|
 | **Timer** | durations, rounds, flow mode, auto-start next phase, one-minute warning |
 | **Focus & breaks** | Do Not Disturb, pause when away (minutes, auto-resume), break enforcement |
-| **Pet** | name, size (50–300 %), custom sprite folder |
+| **Pet** | name, size (50–300 %), custom sprite folder, idle animations and naps |
 | **Notifications & sound** | notifications, sounds, custom phase-end sound with a Test button |
 | **Advanced** | display backend and KWin integration (with **Restart now**), tray stub, open the settings/history folders |
 
@@ -339,6 +363,7 @@ Everything is stored in `~/.config/pomodoro-pet/config.json` (or
 | `sound` | `true` | play a chime when a phase ends |
 | `sound_file` | `null` | custom `.wav`/`.ogg` instead of the bundled chime |
 | `pet_name` | `"Biscuit"` | what the pup is called |
+| `idle_animations` | `true` | look around, yawn, scratch, stretch and nap when the timer isn't running |
 | `position` | `null` | last window position (`{"x":…, "y":…}`), managed for you |
 | `scale` | `1.0` | pet size multiplier (0.5–4) |
 | `sprite_dir` | `null` | folder with your own sprites (see below) |
@@ -351,9 +376,15 @@ it on quit. Otherwise just use the Settings window.
 
 ## Custom sprites
 
-Sprites are looked up per state (`idle`, `focusing`, `break`, `celebrating`,
-and the optional `sulky` idle pose for a low mood) in `sprite_dir` first, then
-the bundled `assets/sprites/`. Each state can be:
+Sprites are looked up per state in `sprite_dir` first, then the bundled
+`assets/sprites/`:
+
+- required: `idle`, `focusing`, `break` (also used for naps), `celebrating`
+- optional: `sulky` (idle pose for a low mood), `petted`, and the one-shot
+  idle animations `look`, `yawn`, `scratch`, `stretch`. A missing optional
+  state is simply skipped. One-shots play their frames once.
+
+Each state can be:
 
 - a folder of frames: `<state>/00.png`, `<state>/01.png`, … (sorted by name), or
 - a horizontal sprite sheet `<state>.png` made of square frames.
@@ -442,6 +473,7 @@ pomodoro_pet/
   remote.py     D-Bus service + client behind --toggle/--status and the shortcuts
   dnd.py        Plasma Do Not Disturb during focus rounds
   history.py    history log, stats, streaks and the pup's mood (pure functions)
+  behaviour.py  petting (rub) detection and idle-animation/nap scheduling
   idle.py       idle-time sources, away/back detection, break coaching
   break_overlay.py  full-screen "dim the screen" break reminder
   stats_window.py  stats window with the 7-day chart
