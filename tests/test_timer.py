@@ -253,3 +253,120 @@ def test_credit_counts_away_time_and_can_finish_the_phase():
     t.start()
     t.update()
     assert finished == [Phase.FOCUS] and t.phase is Phase.SHORT_BREAK
+
+
+# ---- flow mode / overtime ---------------------------------------------------
+def test_flow_mode_counts_up_then_take_break_logs_overtime():
+    t, c = make(focus_minutes=1, flow=True)
+    log = ended_log(t)
+    started = []
+    t.overtime_started.connect(lambda: started.append(True))
+    ticks = []
+    t.tick.connect(ticks.append)
+    t.start()
+    run_for(t, c, 60)
+    assert started == [True] and t.in_overtime and t.phase is Phase.FOCUS and t.state is State.RUNNING
+    assert log == [(Phase.FOCUS, 60, "completed", 1)]  # the round counts as done right away
+    run_for(t, c, 90)
+    assert t.display_seconds() == 90 and ticks[-1] == 90
+    t.pause()
+    c.t += 500  # paused overtime doesn't grow
+    t.start()
+    run_for(t, c, 30)
+    assert t.display_seconds() == 120
+    finished = []
+    t.phase_finished.connect(lambda a, b: finished.append((a, b, t.leaving_overtime)))
+    t.skip()  # in overtime, skip means "take my break"
+    assert log[-1] == (Phase.FOCUS, 120, "overtime", 1)
+    assert finished == [(Phase.FOCUS, Phase.SHORT_BREAK, True)]
+    assert t.phase is Phase.SHORT_BREAK and t.state is State.RUNNING and not t.in_overtime
+    assert not t.can_extend  # you chose the break, no "keep going" now
+
+
+def test_overtime_after_suspend_is_not_counted():
+    t, c = make(focus_minutes=1, flow=True)
+    t.start()
+    run_for(t, c, 60 + 3600)  # slept through the end: no hour of "overtime"
+    assert not t.in_overtime and t.phase is Phase.SHORT_BREAK and t.state is State.PAUSED
+
+
+def test_take_break_trims_idle_and_reset_logs_overtime():
+    t, c = make(focus_minutes=1, flow=True)
+    log = ended_log(t)
+    t.start()
+    run_for(t, c, 60)
+    run_for(t, c, 300)
+    t.take_break(trim=200)
+    assert log[-1] == (Phase.FOCUS, 100, "overtime", 1)
+
+    t2, c2 = make(focus_minutes=1, flow=True)
+    log2 = ended_log(t2)
+    t2.start()
+    run_for(t2, c2, 60)
+    run_for(t2, c2, 40)
+    t2.reset()
+    assert log2 == [(Phase.FOCUS, 60, "completed", 1), (Phase.FOCUS, 40, "overtime", 1)]
+    assert t2.state is State.IDLE and not t2.in_overtime
+
+
+def test_keep_going_turns_the_new_break_into_overtime():
+    t, c = make(focus_minutes=1)
+    log = ended_log(t)
+    t.start()
+    run_for(t, c, 60)
+    assert t.phase is Phase.SHORT_BREAK and t.can_extend
+    run_for(t, c, 45)  # 45 s into the break you click "Keep going"
+    assert t.extend_focus()
+    assert t.phase is Phase.FOCUS and t.in_overtime and t.display_seconds() == 45 and t.round == 1
+    run_for(t, c, 15)
+    t.take_break()
+    assert log == [(Phase.FOCUS, 60, "completed", 1), (Phase.FOCUS, 60, "overtime", 1)]  # break not logged
+    assert t.phase is Phase.SHORT_BREAK and t.remaining_seconds() == 5 * 60
+
+
+def test_cannot_extend_a_break_after_a_skipped_round_or_later_breaks():
+    t, c = make(focus_minutes=1)
+    t.start()
+    t.skip()
+    assert not t.can_extend and not t.extend_focus()
+    t2, c2 = make(focus_minutes=1, short_break_minutes=1)
+    t2.start()
+    run_for(t2, c2, 60)
+    run_for(t2, c2, 60)  # break over, round 2 focus
+    assert not t2.extend_focus()
+
+
+def test_overtime_snapshot_restore():
+    t, c = make(focus_minutes=1, flow=True)
+    t.start()
+    run_for(t, c, 60)
+    run_for(t, c, 100)
+    snap = t.snapshot(wall=50_000.0)
+    assert snap["overtime"] == 100
+    t2, _ = make(focus_minutes=1, flow=True)
+    assert t2.restore(snap, wall=50_030.0)  # quick restart: keeps counting
+    assert t2.in_overtime and t2.state is State.RUNNING and t2.display_seconds() == 130
+    t3, _ = make(focus_minutes=1, flow=True)
+    assert t3.restore(snap, wall=50_000.0 + 3600)  # long gap: paused at what was counted
+    assert t3.in_overtime and t3.state is State.PAUSED and t3.display_seconds() == 100
+
+
+# ---- one-minute warning ----------------------------------------------------
+def test_warning_fires_once_per_phase_and_not_for_short_phases():
+    t, c = make(focus_minutes=5, short_break_minutes=1, warn_seconds=60)
+    warnings = []
+    t.warning.connect(lambda ph, secs: warnings.append((ph, secs)))
+    t.start()
+    run_for(t, c, 200)
+    assert warnings == []
+    run_for(t, c, 41)  # 59 s left
+    assert warnings == [(Phase.FOCUS, 59)]
+    run_for(t, c, 10)
+    assert len(warnings) == 1  # only once
+    run_for(t, c, 49)  # focus ends -> 1-minute break: too short to warn
+    run_for(t, c, 30)
+    assert len(warnings) == 1
+    t.reset()
+    t.start()
+    run_for(t, c, 241)
+    assert warnings[-1] == (Phase.FOCUS, 59) and len(warnings) == 2  # new phase, new warning

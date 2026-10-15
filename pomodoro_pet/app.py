@@ -41,6 +41,7 @@ class Controller:
         self.timer = PomodoroTimer(
             cfg["focus_minutes"], cfg["short_break_minutes"], cfg["long_break_minutes"],
             cfg["rounds"], cfg["auto_advance"],
+            flow=cfg["flow_mode"], warn_seconds=60 if cfg["minute_warning"] else 0,
         )
         sprites = load_sprites(cfg["sprite_dir"])
         self.pet = PetWindow(self.timer, sprites, cfg["scale"])
@@ -61,6 +62,10 @@ class Controller:
         self.popover.stats_requested.connect(self.show_stats)
         self.popover.load_behavior(cfg["idle_pause"], cfg["break_enforcement"])
         self.popover.behavior_changed.connect(self._on_behavior)
+        self.popover.load_flow(cfg["flow_mode"], cfg["minute_warning"])
+        self.popover.flow_changed.connect(self._on_flow)
+        self.timer.overtime_started.connect(self._on_overtime_started)
+        self.timer.warning.connect(self._on_warning)
         self.timer.phase_ended.connect(self._on_phase_ended)
         self.timer.tick.connect(self._update_tooltip)
         self.timer.phase_finished.connect(self._on_phase_finished)
@@ -96,6 +101,10 @@ class Controller:
         self._mood_timer = QTimer(interval=10 * 60 * 1000)
         self._mood_timer.timeout.connect(self._refresh_mood)
         self._mood_timer.start()
+        # Overtime has no end time to save, so keep the session file fresh while it runs.
+        self._overtime_saver = QTimer(interval=60 * 1000)
+        self._overtime_saver.timeout.connect(lambda: self.timer.in_overtime and self._save_session())
+        self._overtime_saver.start()
 
         self.kwin = None
         position = cfg["position"]
@@ -211,7 +220,7 @@ class Controller:
         text = t.phase.label
         if t.phase is Phase.FOCUS:
             text += f" · round {t.round}/{t.rounds}"
-        text += f" · {left} left"
+        text += f" · +{format_mmss(t.display_seconds())} overtime" if t.in_overtime else f" · {left} left"
         text += " (paused)" if t.state is State.PAUSED else ""
         if self.intention and t.phase is Phase.FOCUS:
             text += f" — {self.intention}"
@@ -248,6 +257,9 @@ class Controller:
             self.say(f"{n} round{'s' if n != 1 else ''} today! Good human 🐾")
         elif phase.is_break and outcome == "skipped":
             self.say("Hey… breaks keep us sharp 😤")
+        elif phase is Phase.FOCUS and outcome == "overtime":
+            extra = f"{format_minutes(seconds / 60)} extra logged" if seconds >= 60 else "Nice"
+            self.say(f"Great flow! {extra} 🌊")
         elif phase is Phase.FOCUS and seconds >= 60:
             self.say("Aww, we were on a roll…")
         if self.mood.level != before and self.mood.is_happy and before not in ("happy", "overjoyed"):
@@ -258,7 +270,8 @@ class Controller:
         self.mood = mood(records)
         self.pet.set_mood(self.mood.level)
         s = summarize(records)
-        summary = f"Today {s.today_rounds} rounds · {format_minutes(s.today_minutes)}"
+        rounds = f"{s.today_rounds} round{'s' if s.today_rounds != 1 else ''}"
+        summary = f"Today {rounds} · {format_minutes(s.today_minutes)}"
         if s.streak:
             summary += f" · 🔥 {s.streak}-day streak"
         self.popover.set_stats(f"{self.cfg['pet_name']} is {self.mood.level} {self.mood.emoji}", summary)
@@ -290,6 +303,11 @@ class Controller:
 
     def _on_away(self, idle: float) -> None:
         t = self.timer
+        if self.cfg["idle_pause"] and t.in_overtime and t.state is State.RUNNING:
+            # You wandered off mid-flow: that's your break starting. The idle bit isn't overtime.
+            t.take_break(trim=min(idle, t.overtime()))
+            log.info("You stepped away during overtime: started your break")
+            return
         if not self.cfg["idle_pause"] or t.state is not State.RUNNING or t.phase is not Phase.FOCUS:
             return
         rewind = min(idle, t.elapsed())
@@ -389,8 +407,10 @@ class Controller:
 
     # ---- phase events --------------------------------------------------
     def _on_phase_finished(self, finished, nxt) -> None:
-        from .notify import notify, play_sound
+        from .notify import notify, notify_with_actions, play_sound
 
+        if self.timer.leaving_overtime:
+            return  # you clicked "Take break" yourself: no fanfare needed
         if finished is Phase.FOCUS:
             self.pet.celebrate(4)
             # Lift Do Not Disturb first, or our own "break time" notice gets swallowed.
@@ -417,9 +437,59 @@ class Controller:
         if not self.timer.auto_advance and nxt is not None and not away:
             body += " Click the pup to start."
         if self.cfg["notifications"]:
-            notify(summary, body)
+            if finished is Phase.FOCUS and nxt is not None and nxt.is_break and not away:
+                body += " Or keep going if you're in the flow."
+                notify_with_actions(summary, body, [("keep", "Keep going")], self._keep_going)
+            else:
+                notify(summary, body)
         if self.cfg["sound"]:
             play_sound(self.cfg["sound_file"])
+
+    # ---- flow mode & one-minute warning ---------------------------------
+    def _on_flow(self, flow: bool, warning: bool) -> None:
+        self.cfg["flow_mode"], self.cfg["minute_warning"] = flow, warning
+        self.timer.flow = flow
+        self.timer.warn_seconds = 60 if warning else 0
+        self.pet.update()
+        self._save_debounce.start()
+
+    def _keep_going(self, _choice: str = "keep") -> None:
+        if self.timer.extend_focus():
+            self.say("Okay, keep going! I'll count your overtime 🌊")
+
+    def _on_overtime_started(self) -> None:
+        from .notify import notify_with_actions, play_sound
+
+        self.pet.celebrate(4)
+        self._save_session()
+        if self.cfg["notifications"]:
+            mins = self.timer.duration(self.timer.next_phase() or Phase.SHORT_BREAK) // 60
+            body = (
+                f"You're in the flow, so I'm counting your overtime. "
+                f"Take your {mins}-minute break when you're ready."
+            )
+            if self.intention:
+                body = f"“{self.intention}” — {body}"
+            notify_with_actions(
+                "Focus round done! 🌊", body, [("break", "Take break now")],
+                lambda _choice: self.timer.take_break(),
+            )
+        if self.cfg["sound"]:
+            play_sound(self.cfg["sound_file"])
+
+    def _on_warning(self, phase, _seconds_left: int) -> None:
+        from .assets import asset
+        from .notify import play_sound
+
+        if self.activity.is_away:
+            return  # nobody to warn
+        if phase is Phase.FOCUS:
+            self.say("One minute left. Time to wrap up your thought 🐾")
+        else:
+            self.say("Break ends in a minute. Ready to dive back in? 🐾")
+        sound = asset("sounds", "warn.wav")
+        if self.cfg["sound"] and sound is not None:
+            play_sound(str(sound))
 
     # ---- tray (experimental stub) --------------------------------------
     def minimize_to_tray(self) -> None:

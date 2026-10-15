@@ -46,6 +46,8 @@ class TrayController(QObject):
             return
         text = format_mmss(remaining)
         status = "Done!" if self.timer.state is State.COMPLETE else f"{self.timer.phase.label}: {text}"
+        if self.timer.in_overtime:
+            status = f"Overtime: +{text}"
         self.icon.setToolTip(f"Pomodoro Pet — {status}")
         self.icon.setIcon(self._render(text.split(":")[0]))
 

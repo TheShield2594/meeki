@@ -40,6 +40,7 @@ class Popover(QFrame):
     intention_changed = Signal(str)
     stats_requested = Signal()
     behavior_changed = Signal(bool, str)  # pause when away, break mode
+    flow_changed = Signal(bool, bool)  # flow mode, one-minute warning
 
     def __init__(self, timer: PomodoroTimer, parent: QWidget, show_minimize: bool = False):
         # Qt.Popup -> xdg_popup on Wayland, so it's positioned relative to the
@@ -86,6 +87,14 @@ class Popover(QFrame):
             "Dim the screen: a full-screen break reminder with snooze/skip"
         )
         form.addRow("Breaks", self.break_mode)
+        self.focus_end = QComboBox()
+        self.focus_end.addItem("Start my break", False)
+        self.focus_end.addItem("Keep going (flow)", True)
+        self.focus_end.setToolTip(
+            "Keep going: when the round ends it counts as done, and the timer counts up\n"
+            "your overtime until you click Take break."
+        )
+        form.addRow("When focus ends", self.focus_end)
 
         self.notify_box = QCheckBox("Notify")
         self.sound_box = QCheckBox("Sound")
@@ -130,6 +139,9 @@ class Popover(QFrame):
         layout.addLayout(checks)
         layout.addWidget(self.dnd_box)
         layout.addWidget(self.idle_box)
+        self.warn_box = QCheckBox("1-minute warning")
+        self.warn_box.setToolTip("A soft heads-up a minute before a focus round or break ends")
+        layout.addWidget(self.warn_box)
         layout.addLayout(buttons)
         layout.addWidget(line)
         layout.addLayout(mood_row)
@@ -148,17 +160,20 @@ class Popover(QFrame):
         self.dnd_box.toggled.connect(self._emit_toggles)
         self.idle_box.toggled.connect(self._emit_behavior)
         self.break_mode.currentIndexChanged.connect(self._emit_behavior)
+        self.focus_end.currentIndexChanged.connect(self._emit_flow)
+        self.warn_box.toggled.connect(self._emit_flow)
         self.intention.editingFinished.connect(self._commit_intention)
         self.intention.returnPressed.connect(self._start_from_intention)
         self.stats_btn.clicked.connect(self.stats_requested)
         self.stats_btn.clicked.connect(self.hide)
         self.start_btn.clicked.connect(self._commit_intention)
-        self.start_btn.clicked.connect(timer.toggle)
+        self.start_btn.clicked.connect(self._primary)
         self.reset_btn.clicked.connect(timer.reset)
-        self.skip_btn.clicked.connect(timer.skip)
+        self.skip_btn.clicked.connect(self._secondary)
 
         timer.state_changed.connect(self.refresh)
         timer.phase_changed.connect(self.refresh)
+        timer.overtime_started.connect(self.refresh)
 
     @staticmethod
     def _spin(lo: int, hi: int, suffix: str) -> QSpinBox:
@@ -196,6 +211,31 @@ class Popover(QFrame):
         self.break_mode.setCurrentIndex(max(0, self.break_mode.findData(break_mode)))
         for w in (self.idle_box, self.break_mode):
             w.blockSignals(False)
+
+    def load_flow(self, flow: bool, warning: bool) -> None:
+        for w in (self.focus_end, self.warn_box):
+            w.blockSignals(True)
+        self.focus_end.setCurrentIndex(1 if flow else 0)
+        self.warn_box.setChecked(warning)
+        for w in (self.focus_end, self.warn_box):
+            w.blockSignals(False)
+
+    def _emit_flow(self, *_args) -> None:
+        self.flow_changed.emit(bool(self.focus_end.currentData()), self.warn_box.isChecked())
+
+    def _primary(self) -> None:
+        """Start/Pause/Resume, or "Take break" in overtime."""
+        if self.timer.in_overtime:
+            self.timer.take_break()
+        else:
+            self.timer.toggle()
+
+    def _secondary(self) -> None:
+        """Skip, or Pause/Resume in overtime (where the primary is Take break)."""
+        if self.timer.in_overtime:
+            self.timer.toggle()
+        else:
+            self.timer.skip()
 
     def _emit_behavior(self, *_args) -> None:
         self.behavior_changed.emit(self.idle_box.isChecked(), self.break_mode.currentData())
@@ -237,10 +277,19 @@ class Popover(QFrame):
             phase = t.phase.label
             if t.phase is Phase.FOCUS:
                 phase += f" · round {t.round}/{t.rounds}"
+            if t.in_overtime:
+                phase += " · overtime 🌊"
             text = phase + (" (paused)" if t.state is State.PAUSED else "")
         self.status.setText(text)
         labels = {State.RUNNING: "Pause", State.PAUSED: "Resume"}
-        self.start_btn.setText(labels.get(t.state, "Start"))
+        if t.in_overtime:
+            self.start_btn.setText("Take break")
+            self.skip_btn.setText(labels[t.state] if t.state in labels else "Pause")
+            self.skip_btn.setToolTip("")
+        else:
+            self.start_btn.setText(labels.get(t.state, "Start"))
+            self.skip_btn.setText("Skip")
+            self.skip_btn.setToolTip("End the current phase now")
         self.skip_btn.setEnabled(t.state in (State.RUNNING, State.PAUSED))
 
     def popup_near(self, anchor: QWidget, local_rect) -> None:

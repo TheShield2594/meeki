@@ -378,9 +378,9 @@ def render(fn, i, size=SIZE) -> QImage:
     return img
 
 
-def write_chime(path: Path) -> None:
-    rate, dur = 44100, 1.1
-    notes = [(0.0, 880.0), (0.16, 1318.5)]  # A5 then E6, soft bell-ish
+def write_chime(path: Path, notes=((0.0, 880.0), (0.16, 1318.5)), dur: float = 1.1, volume: float = 0.33) -> None:
+    """Soft bell: the phase-end chime is A5 then E6."""
+    rate = 44100
     frames = bytearray()
     for n in range(int(rate * dur)):
         t = n / rate
@@ -390,7 +390,7 @@ def write_chime(path: Path) -> None:
                 tt = t - start
                 env = math.exp(-tt * 4.0) * min(1.0, tt * 200)
                 v += env * (math.sin(2 * math.pi * freq * tt) + 0.3 * math.sin(2 * math.pi * freq * 2 * tt))
-        frames += struct.pack("<h", int(max(-1.0, min(1.0, v * 0.33)) * 32767))
+        frames += struct.pack("<h", int(max(-1.0, min(1.0, v * volume)) * 32767))
     with wave.open(str(path), "wb") as w:
         w.setnchannels(1)
         w.setsampwidth(2)
@@ -414,6 +414,7 @@ def main() -> int:
     render(frame_idle, 0, 256).save(str(out / "icons" / "pomodoro-pet.png"))
     (out / "sounds").mkdir(parents=True, exist_ok=True)
     write_chime(out / "sounds" / "chime.wav")
+    write_chime(out / "sounds" / "warn.wav", notes=((0.0, 659.3),), dur=0.6, volume=0.16)  # one quiet E5
     print(f"Assets written to {out}")
     return 0
 

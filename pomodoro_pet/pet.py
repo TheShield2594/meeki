@@ -17,6 +17,7 @@ WINDOW_TITLE = "Pomodoro Pet"
 # frames per second for each animation
 FPS = {"idle": 3, "focusing": 4, "break": 2, "celebrating": 8, "sulky": 3}
 
+OVERTIME_COLOR = QColor("#8e24aa")
 PHASE_COLORS = {
     Phase.FOCUS: QColor("#e2574c"),
     Phase.SHORT_BREAK: QColor("#43a047"),
@@ -191,8 +192,16 @@ class PetWindow(QWidget):
             accent, text = QColor("#f9a825"), "Done!"
         elif t.state is State.IDLE:
             accent, text = QColor("#9e9e9e"), format_mmss(self._remaining)
+        elif t.in_overtime:
+            accent, text = OVERTIME_COLOR, "+" + format_mmss(self._remaining)
         else:
             accent, text = PHASE_COLORS[t.phase], format_mmss(self._remaining)
+        # last minute: the outline pulses once a second (one-minute warning)
+        final_minute = (
+            t.state is State.RUNNING and not t.in_overtime and t.warn_seconds > 0
+            and t.duration(t.phase) >= 2 * t.warn_seconds and 0 < self._remaining <= t.warn_seconds
+        )
+        pen_width = 3.5 if final_minute and self._remaining % 2 == 0 else 2.0
 
         # speech bubble with a small tail pointing at the dog
         path = QPainterPath()
@@ -203,7 +212,7 @@ class PetWindow(QWidget):
         tail.lineTo(r.left() + 22, r.bottom() - 1)
         tail.closeSubpath()
         path = path.united(tail)
-        p.setPen(QPen(accent, 2))
+        p.setPen(QPen(accent, pen_width))
         p.setBrush(QColor(255, 255, 255, 235))
         p.drawPath(path)
 
@@ -219,7 +228,7 @@ class PetWindow(QWidget):
         total = n * dot + (n - 1) * gap
         x = r.center().x() - total / 2
         y = r.bottom() - dot - 7
-        done = t.round - 1 + (1 if t.phase.is_break else 0)
+        done = t.round - 1 + (1 if t.phase.is_break or t.in_overtime else 0)
         if t.state is State.COMPLETE:
             done = n
         elif t.state is State.IDLE:
@@ -227,7 +236,7 @@ class PetWindow(QWidget):
         for i in range(n):
             p.setPen(QPen(accent, 1.2))
             p.setBrush(accent if i < done else Qt.NoBrush)
-            if i == done and t.state is State.RUNNING and t.phase is Phase.FOCUS:
+            if i == done and t.state is State.RUNNING and t.phase is Phase.FOCUS and not t.in_overtime:
                 p.setBrush(QColor(accent.red(), accent.green(), accent.blue(), 90))
             p.drawEllipse(QRectF(x, y, dot, dot))
             x += dot + gap

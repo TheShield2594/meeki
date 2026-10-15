@@ -192,3 +192,62 @@ def test_idle_pauses_focus_and_welcomes_you_back(env):
         assert wait_for(lambda: "(paused)" in cli(e, "--status")[1])
     finally:
         stop_app(app)
+
+
+def seed_session_ending_soon(tmp, seconds=2.0, **config):
+    """A running focus round that ends `seconds` after the app starts."""
+    now = time.time()
+    state = tmp / "state" / "pomodoro-pet"
+    state.mkdir(parents=True, exist_ok=True)
+    (state / "session.json").write_text(json.dumps({
+        "state": "running", "phase": "focus", "round": 1, "remaining": seconds,
+        "saved_at": now, "ends_at": now + seconds + 1.5,  # + startup time
+    }))
+    if config:
+        cfg = tmp / "config" / "pomodoro-pet"
+        cfg.mkdir(parents=True, exist_ok=True)
+        (cfg / "config.json").write_text(json.dumps(config))
+
+
+def click_last_notification(e, action):
+    subprocess.run(
+        ["gdbus", "call", "--session", "--dest", "org.freedesktop.Notifications", "--object-path",
+         "/org/freedesktop/Notifications", "--method", "org.freedesktop.Notifications.InvokeLast", action],
+        env=e, check=True, capture_output=True, timeout=10,
+    )
+
+
+@pytest.mark.skipif(not shutil.which("gdbus") or not shutil.which("notify-send"), reason="needs gdbus + notify-send")
+def test_keep_going_button_turns_the_break_into_overtime(env):
+    e, log, tmp = env
+    seed_session_ending_soon(tmp)
+    app = start_app(e)
+    try:
+        assert wait_for(lambda: cli(e, "--status")[1].startswith("Short break"))
+        assert wait_for(lambda: "actions keep" in log.read_text())
+        click_last_notification(e, "keep")
+        assert wait_for(lambda: "overtime" in cli(e, "--status")[1])
+        assert cli(e, "--status")[1].startswith("Focus · round 1/4 · +00:0")
+        time.sleep(1.2)  # a little overtime to log
+        cli(e, "--skip")  # = take my break
+        assert wait_for(lambda: cli(e, "--status")[1].startswith("Short break · 05:00"))
+    finally:
+        stop_app(app)
+    history = [json.loads(line) for line in (tmp / "data" / "pomodoro-pet" / "history.jsonl").open()]
+    assert [(r["type"], r["outcome"]) for r in history] == [("focus", "completed"), ("focus", "overtime")]
+
+
+@pytest.mark.skipif(not shutil.which("gdbus") or not shutil.which("notify-send"), reason="needs gdbus + notify-send")
+def test_flow_mode_counts_overtime_until_take_break(env):
+    e, log, tmp = env
+    seed_session_ending_soon(tmp, flow_mode=True)
+    app = start_app(e)
+    try:
+        assert wait_for(lambda: "overtime" in cli(e, "--status")[1])
+        assert wait_for(lambda: "notify Focus round done! 🌊" in log.read_text())
+        time.sleep(1.2)
+        assert "+00:00" not in cli(e, "--status")[1]  # counting up
+        click_last_notification(e, "break")  # "Take break now"
+        assert wait_for(lambda: cli(e, "--status")[1].startswith("Short break · "))
+    finally:
+        stop_app(app)

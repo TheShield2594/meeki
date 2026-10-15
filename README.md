@@ -33,6 +33,11 @@ with a pink bow.
 - **Pauses when you step away:** no keyboard/mouse for 3 minutes, or a
   locked screen, pauses the focus round without counting the idle time. When
   you're back you choose *Resume* or *I was working, count it*
+- **Flow mode:** when a round ends mid-thought, keep going. The bubble counts
+  your overtime up (`+03:12`) until you click **Take break**. Even with flow
+  mode off, the round-done notification has a **Keep going** button
+- **One-minute warning:** a soft tone, a word from the pup and a pulsing
+  bubble a minute before a focus round or break ends
 - **Break enforcement:** keep working during a break and the pup wiggles and
   nags you, or in *Dim the screen* mode a full-screen break reminder appears
   with snooze and skip
@@ -114,6 +119,8 @@ Optional dependencies: `libnotify` (notifications), `pipewire` or `libpulse`
 | Open the controls | click the pup or the bubble |
 | Move the pup | drag it |
 | Start / pause from anywhere | <kbd>Meta</kbd>+<kbd>Shift</kbd>+<kbd>P</kbd> |
+| Keep going when a round ends | **Keep going** on the notification, or turn on flow mode |
+| End overtime | **Take break** in the popover, or Skip / `pomodoro-pet --skip` |
 | Set what you're working on | type it in the popover's top field, then <kbd>Enter</kbd> to start |
 | See stats | **Stats** button in the popover |
 | Check status and mood | hover the pup |
@@ -185,14 +192,14 @@ for the stats.
 
 ### Stats
 
-Every phase that ends (finished, skipped or reset) is appended to
+Every phase that ends (finished, skipped, reset, or overtime) is appended to
 `~/.local/share/pomodoro-pet/history.jsonl`, one JSON object per line, so it's
 easy to process with `jq` or a spreadsheet. The **Stats** window shows:
 
 ![Stats window](docs/stats.png)
 
-- **Today:** finished rounds and focused time. Partly done rounds count toward
-  time but not toward rounds
+- **Today:** finished rounds and focused time. Partly done rounds and
+  overtime count toward time but not toward rounds
 - **Streak:** consecutive days with at least one finished round, plus your best.
   A streak survives until midnight, so today doesn't break it before you start
 - **This week** and **all time** totals
@@ -216,6 +223,36 @@ Wayland. GNOME and plain X11 have fallbacks.
 - **During breaks:** being away is the point, so nothing pauses.
 
 Turn it off with *Pause when I step away* in the popover.
+
+### Flow mode (overtime)
+
+Sometimes the timer goes off right as you're getting somewhere.
+
+- **Keep going, once.** With flow mode off (the default), the round-done
+  notification has a **Keep going** button. Click it during the break that
+  just started, and the break turns back into focus *overtime*, counted from
+  the moment the round ended.
+- **Flow mode, always.** Set **When focus ends → Keep going (flow)** in the
+  popover (`"flow_mode": true`). A finished round counts as done right away,
+  the pup celebrates, and the timer keeps counting up instead of starting the
+  break. The notification offers **Take break now**.
+
+During overtime the bubble turns purple and counts up (`+03:12`), the
+popover's main button becomes **Take break** (Skip, the shortcut's
+`--skip` and `pomodoro-pet --skip` do the same), and Do Not Disturb stays on.
+Overtime is logged as focus time, so it shows up in today's and the week's
+minutes, but it never adds a round. If you walk away during overtime, the idle
+detector ends it for you and starts your break, without counting the idle
+minutes. Overtime survives restarts like any other session state.
+
+### One-minute warning
+
+A minute before a focus round or break ends (for phases of 2 minutes or more),
+you get a soft single tone (with sound on), a line from the pup ("One minute
+left. Time to wrap up your thought 🐾") and a bubble outline that pulses until
+the end. It's deliberately quiet: no notification, so it doesn't break Do Not
+Disturb, and nothing at all if you're away from the computer. Toggle it with
+**1-minute warning** in the popover (`"minute_warning"`).
 
 ### Break enforcement
 
@@ -267,6 +304,8 @@ written automatically. Keys:
 | `long_break_minutes` | `15` | long break (1–240) |
 | `rounds` | `4` | focus rounds before the long break (1–12) |
 | `auto_advance` | `true` | start the next phase automatically |
+| `flow_mode` | `false` | when focus ends, count overtime up until you take your break |
+| `minute_warning` | `true` | soft heads-up one minute before a phase ends |
 | `notifications` | `true` | KDE notification when a phase ends |
 | `dnd_during_focus` | `true` | Plasma Do Not Disturb during focus rounds |
 | `idle_pause` | `true` | pause focus rounds when you step away |

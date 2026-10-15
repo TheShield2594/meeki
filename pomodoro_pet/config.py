@@ -19,6 +19,8 @@ DEFAULTS: dict[str, Any] = {
     "long_break_minutes": 15,
     "rounds": 4,
     "auto_advance": True,
+    "flow_mode": False,  # when focus ends, keep counting up (overtime) until you take your break
+    "minute_warning": True,  # soft heads-up one minute before a phase ends
     # Feedback
     "notifications": True,
     "dnd_during_focus": True,  # Plasma "Do Not Disturb" while a focus round runs
