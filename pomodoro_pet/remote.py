@@ -5,6 +5,7 @@ The running app owns io.github.pomodoropet on the session bus and exports
 
     Toggle, Start, Pause, Skip, Reset, Show   -> ()
     Status                                    -> s
+    SetIntention(s)                           what you're focusing on
     reportPosition(s)                         used by the KWin script
 
 The KDE global shortcuts (see packaging/pomodoro-pet.desktop, installed into
@@ -31,6 +32,7 @@ COMMANDS = ("toggle", "start", "pause", "skip", "reset", "show", "status")
 class PetService(QObject):
     command = Signal(str)  # one of COMMANDS except "status"
     position_reported = Signal(int, int)
+    intention_set = Signal(str)
 
     def __init__(self, status_provider: Callable[[], str], parent: QObject | None = None):
         super().__init__(parent)
@@ -89,6 +91,10 @@ class PetService(QObject):
         return self._status()
 
     @Slot(str)
+    def SetIntention(self, text: str) -> None:  # noqa: N802
+        self.intention_set.emit(text.strip()[:120])
+
+    @Slot(str)
     def reportPosition(self, xy: str) -> None:  # noqa: N802
         try:
             x, y = (int(float(v)) for v in xy.split(","))
@@ -97,7 +103,10 @@ class PetService(QObject):
         self.position_reported.emit(x, y)
 
 
-def send_command(command: str) -> tuple[bool, str]:
+_METHODS = {"setintention": "SetIntention"}
+
+
+def send_command(command: str, *args: str) -> tuple[bool, str]:
     """Client side: call the running instance. Needs a QCoreApplication."""
     try:
         from PySide6.QtDBus import QDBusConnection, QDBusInterface, QDBusMessage
@@ -109,7 +118,7 @@ def send_command(command: str) -> tuple[bool, str]:
     iface = QDBusInterface(DBUS_SERVICE, DBUS_PATH, DBUS_IFACE, bus)
     if not iface.isValid():
         return False, "Pomodoro Pet is not reachable over D-Bus"
-    reply = iface.call(command.capitalize())
+    reply = iface.call(_METHODS.get(command, command.capitalize()), *args)
     if reply.type() != QDBusMessage.ReplyMessage:
         return False, reply.errorMessage()
     args = reply.arguments()

@@ -14,7 +14,7 @@ from .wayland import running_on_wayland
 WINDOW_TITLE = "Pomodoro Pet"
 
 # frames per second for each animation
-FPS = {"idle": 3, "focusing": 4, "break": 2, "celebrating": 8}
+FPS = {"idle": 3, "focusing": 4, "break": 2, "celebrating": 8, "sulky": 3}
 
 PHASE_COLORS = {
     Phase.FOCUS: QColor("#e2574c"),
@@ -73,6 +73,7 @@ class PetWindow(QWidget):
         self._dragging = False
         self._drag_offset = QPoint()
         self._remaining = timer.remaining_seconds()
+        self.mood_level = "content"  # see history.mood(); drives the idle pose
 
         self._anim = QTimer(self)
         self._anim.timeout.connect(self._advance)
@@ -90,12 +91,19 @@ class PetWindow(QWidget):
         self._refresh_state()
         QTimer.singleShot(int(seconds * 1000) + 50, self._refresh_state)
 
+    def set_mood(self, level: str) -> None:
+        if level != self.mood_level:
+            self.mood_level = level
+            self._refresh_state()
+
     def _target_state(self) -> str:
         if time.monotonic() < self._celebrate_until:
             return "celebrating"
         t = self.timer
         if t.state in (State.RUNNING, State.PAUSED):
             return "break" if t.phase.is_break else "focusing"
+        if self.mood_level in ("sulky", "sad") and self.sprites.get("sulky"):
+            return "sulky"
         return "idle"
 
     def _refresh_state(self) -> None:
@@ -128,10 +136,31 @@ class PetWindow(QWidget):
         if frames:
             pm = frames[self._frame % len(frames)]
             p.drawPixmap(self.sprite_rect, pm)
+        if self._anim_state == "idle" and self.mood_level in ("happy", "overjoyed"):
+            self._paint_hearts(p)
 
         self._paint_bubble(p)
         self._paint_close(p)
         p.end()
+
+    def _paint_hearts(self, p: QPainter) -> None:
+        """Hearts floating up beside the pup's head when it's happy."""
+        r = QRectF(self.sprite_rect)
+        frames = max(1, len(self.sprites.get("idle") or [1]))
+        hearts = [(0.0, 0.80)] + ([(0.5, 0.16)] if self.mood_level == "overjoyed" else [])
+        for offset, x_frac in hearts:
+            t = ((self._frame / frames) + offset) % 1.0
+            size = r.width() * (0.09 + 0.03 * t)
+            cx = r.left() + r.width() * x_frac + r.width() * 0.03 * (1 - t)
+            cy = r.top() + r.height() * (0.32 - 0.30 * t)
+            color = QColor("#ec5486")
+            color.setAlphaF(max(0.0, min(1.0, 1.4 - 1.4 * t)))
+            path = QPainterPath(QPointF(cx, cy + size * 0.35))
+            path.cubicTo(cx - size * 1.1, cy - size * 0.35, cx - size * 0.45, cy - size * 0.95, cx, cy - size * 0.35)
+            path.cubicTo(cx + size * 0.45, cy - size * 0.95, cx + size * 1.1, cy - size * 0.35, cx, cy + size * 0.35)
+            p.setPen(Qt.NoPen)
+            p.setBrush(color)
+            p.drawPath(path)
 
     def _paint_bubble(self, p: QPainter) -> None:
         t = self.timer

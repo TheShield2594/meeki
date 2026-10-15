@@ -39,6 +39,7 @@ def env(tmp_path):
         XDG_RUNTIME_DIR=str(runtime),
         XDG_CONFIG_HOME=str(tmp_path / "config"),
         XDG_STATE_HOME=str(tmp_path / "state"),
+        XDG_DATA_HOME=str(tmp_path / "data"),
         QT_QPA_PLATFORM="offscreen",
         PYTHONPATH=str(ROOT),
     )
@@ -82,14 +83,15 @@ def test_remote_control_dnd_and_resume(env):
     try:
         assert cli(e, "--status") == (0, "Idle · 25:00")
 
-        assert cli(e, "--toggle")[0] == 0
+        assert cli(e, "--intention", "Write tests", "--toggle")[0] == 0
         assert wait_for(lambda: events(log) == ["inhibit pomodoro-pet"])
         code, status = cli(e, "--status")
-        assert status.startswith("Focus · round 1/4 · ") and status.endswith("left")
+        assert status.startswith("Focus · round 1/4 · ") and status.endswith("left — Write tests")
+        time.sleep(1.2)  # focused time for the round skipped below (paused time doesn't count)
 
         cli(e, "--pause")
         assert wait_for(lambda: events(log) == ["inhibit pomodoro-pet", "released"])
-        assert cli(e, "--status")[1].endswith("(paused)")
+        assert "(paused)" in cli(e, "--status")[1]
 
         cli(e, "--start")
         assert wait_for(lambda: len(events(log)) == 3)
@@ -101,6 +103,11 @@ def test_remote_control_dnd_and_resume(env):
         last_notify = max(i for i, line in enumerate(lines) if line.startswith("notify"))
         assert last_release < last_notify
         assert cli(e, "--status")[1].startswith("Short break · ")
+        history = [json.loads(line) for line in (tmp / "data" / "pomodoro-pet" / "history.jsonl").open()]
+        assert history[-1]["type"] == "focus" and history[-1]["outcome"] == "skipped"
+        assert history[-1]["intention"] == "Write tests" and history[-1]["seconds"] >= 1
+        code, report = cli(e, "--stats")  # works straight from the log file
+        assert code == 0 and report.startswith("Biscuit is ") and "Write tests" in report
 
         cli(e, "--toggle")  # pause the break
         assert cli(e)[0] == 0  # second launch just talks to the running one

@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
-from PySide6.QtCore import QPoint, Qt, Signal
+from PySide6.QtCore import QPoint, QStringListModel, Qt, Signal
 from PySide6.QtWidgets import (
     QCheckBox,
+    QCompleter,
     QFormLayout,
     QFrame,
     QHBoxLayout,
     QLabel,
+    QLineEdit,
     QPushButton,
     QSpinBox,
     QVBoxLayout,
@@ -25,6 +27,7 @@ STYLE = """
     border-radius: 10px;
 }
 #status { font-weight: 600; }
+#muted { color: palette(placeholder-text); }
 QPushButton#primary { font-weight: 600; }
 """
 
@@ -33,6 +36,8 @@ class Popover(QFrame):
     settings_changed = Signal(int, int, int, int)  # focus, short, long, rounds
     toggles_changed = Signal(bool, bool, bool)  # notifications, sound, do-not-disturb
     minimize_requested = Signal()
+    intention_changed = Signal(str)
+    stats_requested = Signal()
 
     def __init__(self, timer: PomodoroTimer, parent: QWidget, show_minimize: bool = False):
         # Qt.Popup -> xdg_popup on Wayland, so it's positioned relative to the
@@ -46,6 +51,18 @@ class Popover(QFrame):
 
         self.status = QLabel()
         self.status.setObjectName("status")
+
+        self.intention = QLineEdit()
+        self.intention.setPlaceholderText("What are you focusing on?")
+        self.intention.setMaxLength(120)
+        self.intention.setClearButtonEnabled(True)
+        self.intention.setToolTip("Logged with each round. Press Enter to start focusing.")
+        self._suggestions = QStringListModel(self)
+        completer = QCompleter(self._suggestions, self)
+        completer.setCaseSensitivity(Qt.CaseInsensitive)
+        completer.setFilterMode(Qt.MatchContains)
+        self.intention.setCompleter(completer)
+        self._committed_intention = ""
 
         self.focus = self._spin(1, 240, " min")
         self.short = self._spin(1, 120, " min")
@@ -79,14 +96,30 @@ class Popover(QFrame):
         buttons.addWidget(self.skip_btn, 1)
         buttons.addWidget(self.reset_btn, 1)
 
+        self.mood_label = QLabel()
+        self.stats_btn = QPushButton("Stats")
+        self.stats_btn.setToolTip("Focus history, streaks and charts")
+        mood_row = QHBoxLayout()
+        mood_row.addWidget(self.mood_label, 1)
+        mood_row.addWidget(self.stats_btn)
+        self.summary_label = QLabel()
+        self.summary_label.setObjectName("muted")
+        line = QFrame()
+        line.setFrameShape(QFrame.HLine)
+        line.setFrameShadow(QFrame.Sunken)
+
         layout = QVBoxLayout(self)
         layout.setContentsMargins(12, 10, 12, 12)
         layout.setSpacing(8)
         layout.addWidget(self.status)
+        layout.addWidget(self.intention)
         layout.addLayout(form)
         layout.addLayout(checks)
         layout.addWidget(self.dnd_box)
         layout.addLayout(buttons)
+        layout.addWidget(line)
+        layout.addLayout(mood_row)
+        layout.addWidget(self.summary_label)
 
         if show_minimize:
             tray_btn = QPushButton("Minimize to tray (experimental)")
@@ -99,6 +132,11 @@ class Popover(QFrame):
         self.notify_box.toggled.connect(self._emit_toggles)
         self.sound_box.toggled.connect(self._emit_toggles)
         self.dnd_box.toggled.connect(self._emit_toggles)
+        self.intention.editingFinished.connect(self._commit_intention)
+        self.intention.returnPressed.connect(self._start_from_intention)
+        self.stats_btn.clicked.connect(self.stats_requested)
+        self.stats_btn.clicked.connect(self.hide)
+        self.start_btn.clicked.connect(self._commit_intention)
         self.start_btn.clicked.connect(timer.toggle)
         self.reset_btn.clicked.connect(timer.reset)
         self.skip_btn.clicked.connect(timer.skip)
@@ -113,6 +151,31 @@ class Popover(QFrame):
         spin.setSuffix(suffix)
         spin.setAlignment(Qt.AlignRight)
         return spin
+
+    # ---- intention / stats ---------------------------------------------
+    def _commit_intention(self) -> None:
+        text = self.intention.text().strip()
+        if text != self._committed_intention:
+            self._committed_intention = text
+            self.intention_changed.emit(text)
+
+    def _start_from_intention(self) -> None:
+        self._commit_intention()
+        if self.timer.state is not State.RUNNING:
+            self.timer.start()
+        self.hide()
+
+    def set_intention(self, text: str) -> None:
+        self._committed_intention = text
+        if self.intention.text() != text:
+            self.intention.setText(text)
+
+    def set_suggestions(self, items: list[str]) -> None:
+        self._suggestions.setStringList(items)
+
+    def set_stats(self, mood_text: str, summary_text: str) -> None:
+        self.mood_label.setText(mood_text)
+        self.summary_label.setText(summary_text)
 
     def load(
         self, focus: int, short: int, long: int, rounds: int, notifications: bool, sound: bool, dnd: bool
@@ -169,4 +232,8 @@ class Popover(QFrame):
                 target.setY(area.bottom() - self.height())
         self.move(target)
         self.show()
-        self.start_btn.setFocus()
+        if self.timer.state is State.RUNNING:
+            self.start_btn.setFocus()  # Space pauses
+        else:
+            self.intention.setFocus()  # type, Enter starts
+            self.intention.selectAll()

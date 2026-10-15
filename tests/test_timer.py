@@ -189,3 +189,39 @@ def test_restore_paused_and_stale():
     assert not t4.restore(snap, wall=10_000.0 + 13 * 3600)  # too old
     assert t4.state is State.IDLE
     assert not t4.restore({"state": "bogus"})
+
+
+# ---- phase_ended (history log) ----------------------------------------------
+def ended_log(t):
+    log = []
+    t.phase_ended.connect(lambda ph, secs, outcome, rnd: log.append((ph, round(secs), outcome, rnd)))
+    return log
+
+
+def test_phase_ended_completed_skipped_reset():
+    t, c = make(focus_minutes=1, short_break_minutes=1)
+    log = ended_log(t)
+    t.start()
+    run_for(t, c, 60)  # focus completes
+    run_for(t, c, 20)
+    t.skip()  # break skipped after 20 s
+    run_for(t, c, 30)
+    t.pause()
+    c.t += 999  # paused time doesn't count
+    t.reset()  # round 2 focus abandoned after 30 s
+    assert log == [
+        (Phase.FOCUS, 60, "completed", 1),
+        (Phase.SHORT_BREAK, 20, "skipped", 1),
+        (Phase.FOCUS, 30, "reset", 2),
+    ]
+
+
+def test_skip_after_session_complete_does_nothing():
+    t, c = make(focus_minutes=1, long_break_minutes=1, rounds=1)
+    t.start()
+    run_for(t, c, 60)
+    run_for(t, c, 60)
+    assert t.state is State.COMPLETE
+    log = ended_log(t)
+    t.skip()
+    assert log == [] and t.state is State.COMPLETE

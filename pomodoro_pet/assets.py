@@ -12,6 +12,7 @@ from PySide6.QtGui import QColor, QPainter, QPixmap
 log = logging.getLogger(__name__)
 
 STATES = ("idle", "focusing", "break", "celebrating")
+OPTIONAL_STATES = ("sulky",)  # idle pose for a low mood; falls back to "idle"
 
 
 def assets_dir() -> Path | None:
@@ -97,4 +98,10 @@ def load_sprites(override_dir: str | None = None) -> dict[str, list[QPixmap]]:
             log.warning("No sprite frames for state %r; using placeholder", state)
             frames = _placeholder(state)
         sprites[state] = frames
+    for state in OPTIONAL_STATES:
+        for root in roots:
+            frames = _load_state(root, state)
+            if frames:
+                sprites[state] = frames
+                break
     return sprites

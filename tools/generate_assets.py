@@ -137,10 +137,11 @@ def eyes(p, lx, rx_, y, mode):
         for x in (lx, rx_):
             p.drawArc(QRectF(x - 9, y - 4, 18, 14), 20 * 16, 140 * 16)
         return
-    dy = 3 if mode == "down" else 0
+    dy = 3 if mode in ("down", "side") else 0
+    dx = -6 if mode == "side" else 0  # "side": looking away, unimpressed
     for x in (lx, rx_):
         ellipse(p, x, y, 9.5, 10.5, INK)
-        ellipse(p, x + 3, y - 4 + dy, 3.4, 3.4, QColor("white"))
+        ellipse(p, x + 3 + dx, y - 4 + dy, 3.4, 3.4, QColor("white"))
         ellipse(p, x - 3, y + 4 + dy, 1.6, 1.6, QColor(255, 255, 255, 180))
     if mode == "down":  # sleepy-focused lids
         for x in (lx, rx_):
@@ -151,6 +152,20 @@ def eyes(p, lx, rx_, y, mode):
             pen.setCapStyle(Qt.RoundCap)
             p.setPen(pen)
             p.drawLine(QPointF(x - 10, y - 1), QPointF(x + 10, y - 1))
+    if mode == "side":  # heavy lids slanting down to the middle: a grumpy look
+        for x, inner in ((lx, 1), (rx_, -1)):
+            lid = QPainterPath(QPointF(x - 12, y - 13))
+            lid.lineTo(x + 12, y - 13)
+            lid.lineTo(x + 12, y - 2 + inner * 3)
+            lid.lineTo(x - 12, y - 2 - inner * 3)
+            lid.closeSubpath()
+            p.setPen(Qt.NoPen)
+            p.setBrush(WHITE)
+            p.drawPath(lid)
+            pen = QPen(INK, 2.4)
+            pen.setCapStyle(Qt.RoundCap)
+            p.setPen(pen)
+            p.drawLine(QPointF(x - 10, y - 2 - inner * 2.5), QPointF(x + 10, y - 2 + inner * 2.5))
 
 
 def face(p, cx, cy, eye_mode="open", mouth="smile", glasses=False):
@@ -186,6 +201,9 @@ def face(p, cx, cy, eye_mode="open", mouth="smile", glasses=False):
         p.drawLine(QPointF(cx, cy + 21), QPointF(cx, cy + 25))
         p.drawArc(QRectF(cx - 10, cy + 19, 10, 10), 200 * 16, 140 * 16)
         p.drawArc(QRectF(cx, cy + 19, 10, 10), 200 * 16, 140 * 16)
+    elif mouth == "frown":
+        p.drawLine(QPointF(cx, cy + 21), QPointF(cx, cy + 25))
+        p.drawArc(QRectF(cx - 9, cy + 25, 18, 10), 30 * 16, 120 * 16)
     elif mouth == "flat":
         p.drawLine(QPointF(cx, cy + 21), QPointF(cx, cy + 25))
         p.drawLine(QPointF(cx - 6, cy + 27), QPointF(cx + 6, cy + 27))
@@ -321,11 +339,31 @@ def frame_celebrating(p, i):
             ear_flap=[0, 10, 22, 28, 22, 10][i], paws="up", shadow_scale=1 - lifts[i] / 80)
 
 
+def rain_cloud(p, i):
+    """Little grey cloud with rain for the sulky pup."""
+    cx, cy = 200 + [0, 2, 4, 2][i], 34
+    pen = QPen(QColor("#7d8aa0"), 2.6)
+    pen.setCapStyle(Qt.RoundCap)
+    p.setPen(pen)
+    for k in range(3):
+        y = cy + 18 + ((i * 7 + k * 9) % 22)
+        p.drawLine(QPointF(cx - 12 + k * 12, y), QPointF(cx - 14 + k * 12, y + 6))
+    for ox, oy, r in ((-14, 4, 11), (0, -4, 14), (14, 4, 11), (0, 8, 12)):
+        ellipse(p, cx + ox, cy + oy, r, r * 0.85, QColor("#b3bccb"))
+
+
+def frame_sulky(p, i):
+    sitting(p, tail_angle=34, breathe=(1 if i % 2 else 0), tilt=-7, eye_mode="side", mouth="frown",
+            ear_flap=-12)
+    rain_cloud(p, i)
+
+
 STATES = {
     "idle": (frame_idle, 8),
     "focusing": (frame_focusing, 4),
     "break": (frame_break, 4),
     "celebrating": (frame_celebrating, 6),
+    "sulky": (frame_sulky, 4),  # idle pose when the pup's mood is low
 }
 
 

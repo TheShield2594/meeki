@@ -26,6 +26,13 @@ with a pink bow.
   running the next one
 - **Resumes after restarts and crashes:** the current session is saved and
   picked up on the next launch
+- **Focus intention:** type what you're working on. It's shown on hover,
+  included in notifications and logged with each round
+- **Stats:** today's rounds and focus time, day streaks, a 7-day chart and
+  your top focus topics, in a stats window or with `pomodoro-pet --stats`
+- **A pup with moods:** Biscuit (rename it in the config) cheers up as you
+  finish rounds and build streaks, floats hearts when happy, and sulks under a
+  rain cloud if you skip breaks, abandon rounds or stay away for days
 - The little **×** quits completely. No tray icon, no background process
 - Settings live in `~/.config/pomodoro-pet/config.json`
 
@@ -46,7 +53,9 @@ Options:
 
 ```
 python -m pomodoro_pet --toggle           # start/pause (launches the pet if needed)
-python -m pomodoro_pet --status           # e.g. "Focus · round 2/4 · 12:34 left"
+python -m pomodoro_pet --status           # e.g. "Focus · round 2/4 · 12:34 left — Write report"
+python -m pomodoro_pet --intention "Write report" --start
+python -m pomodoro_pet --stats            # print your stats (no running pet needed)
 python -m pomodoro_pet --backend xcb      # force XWayland for this run
 python -m pomodoro_pet --reset-position   # forget the saved position
 python -m pomodoro_pet -v                 # verbose logging
@@ -98,6 +107,9 @@ Optional dependencies: `libnotify` (notifications), `pipewire` or `libpulse`
 | Open the controls | click the pup or the bubble |
 | Move the pup | drag it |
 | Start / pause from anywhere | <kbd>Meta</kbd>+<kbd>Shift</kbd>+<kbd>P</kbd> |
+| Set what you're working on | type it in the popover's top field, then <kbd>Enter</kbd> to start |
+| See stats | **Stats** button in the popover |
+| Check status and mood | hover the pup |
 | Quit | the small **×** at the top-left (shows clearly on hover) |
 
 While the popover is open you can change durations. Changes to a running phase
@@ -127,12 +139,14 @@ The shortcuts run the same commands you can use in a terminal or script:
 | `pomodoro-pet --skip` | end the current phase now |
 | `pomodoro-pet --reset` | back to round 1, idle |
 | `pomodoro-pet --show` | bring the pet back (e.g. from tray mode) |
-| `pomodoro-pet --status` | print the phase and time left (exit code 1 if not running) |
+| `pomodoro-pet --status` | print the phase, time left and intention (exit code 1 if not running) |
+| `pomodoro-pet --intention "TEXT"` | set what you're focusing on. Combine with `--start` |
+| `pomodoro-pet --stats` | print stats and the pup's mood. Reads the log, so the pet needn't be running |
 
 Launching `pomodoro-pet` again while it's running doesn't create a second pet.
 Under the hood the commands are D-Bus calls (`io.github.pomodoropet`,
 `/PomodoroPet`, methods `Toggle`, `Start`, `Pause`, `Skip`, `Reset`, `Show`,
-`Status`), so anything that can call D-Bus can drive the timer.
+`Status`, `SetIntention(s)`), so anything that can call D-Bus can drive the timer.
 
 ### Do Not Disturb
 
@@ -153,6 +167,48 @@ or `"dnd_during_focus": false`.
   `~/.local/state/pomodoro-pet/session.json` at every change and on quit. The
   next launch picks it up. Sessions older than 12 hours are dropped.
 
+### Focus intention
+
+When you open the popover with the timer stopped, the cursor is already in the
+*"What are you focusing on?"* field. Type the task and press
+<kbd>Enter</kbd> to start. Earlier entries are suggested as you type. The
+intention stays until you change it. It appears in the hover tooltip,
+`--status` and the focus-done notification, and it's recorded with every round
+for the stats.
+
+### Stats
+
+Every phase that ends (finished, skipped or reset) is appended to
+`~/.local/share/pomodoro-pet/history.jsonl`, one JSON object per line, so it's
+easy to process with `jq` or a spreadsheet. The **Stats** window shows:
+
+![Stats window](docs/stats.png)
+
+- **Today:** finished rounds and focused time. Partly done rounds count toward
+  time but not toward rounds
+- **Streak:** consecutive days with at least one finished round, plus your best.
+  A streak survives until midnight, so today doesn't break it before you start
+- **This week** and **all time** totals
+- **Focus time, last 7 days** as a bar chart (hover a bar for the exact value)
+- **Top focus this week:** time per intention
+
+### The pup's mood
+
+Biscuit's mood comes from your history, not from a random roll:
+
+| Makes it happier | Makes it sulk |
+|---|---|
+| finishing focus rounds today | skipping a break |
+| keeping a day streak | abandoning a round (skip/reset after a minute or more) |
+| | not seeing you for two days or more |
+
+Five levels: *overjoyed 🥰* and *happy 😊* float hearts, *content 🙂* is the
+normal pup, and *sulky 😤* and *sad 🥺* switch to the grumpy rain-cloud pose.
+The pup also comments on what just happened in a little speech tooltip. The
+popover and the hover tooltip show the current mood and why. The mood is
+checked every 10 minutes too, so a new day or a long absence shows up without
+any action from you.
+
 ## Configuration
 
 `~/.config/pomodoro-pet/config.json` (or `$XDG_CONFIG_HOME/pomodoro-pet/`) is
@@ -169,6 +225,7 @@ written automatically. Keys:
 | `dnd_during_focus` | `true` | Plasma Do Not Disturb during focus rounds |
 | `sound` | `true` | play a chime when a phase ends |
 | `sound_file` | `null` | custom `.wav`/`.ogg` instead of the bundled chime |
+| `pet_name` | `"Biscuit"` | what the pup is called |
 | `position` | `null` | last window position (`{"x":…, "y":…}`), managed for you |
 | `scale` | `1.0` | pet size multiplier (0.5–4) |
 | `sprite_dir` | `null` | folder with your own sprites (see below) |
@@ -180,8 +237,9 @@ Edit it while the app is closed. The app rewrites it on quit.
 
 ## Custom sprites
 
-Sprites are looked up per state (`idle`, `focusing`, `break`, `celebrating`)
-in `sprite_dir` first, then the bundled `assets/sprites/`. Each state can be:
+Sprites are looked up per state (`idle`, `focusing`, `break`, `celebrating`,
+and the optional `sulky` idle pose for a low mood) in `sprite_dir` first, then
+the bundled `assets/sprites/`. Each state can be:
 
 - a folder of frames: `<state>/00.png`, `<state>/01.png`, … (sorted by name), or
 - a horizontal sprite sheet `<state>.png` made of square frames.
@@ -265,6 +323,8 @@ pomodoro_pet/
   wayland.py    backend selection + KWin scripting integration
   remote.py     D-Bus service + client behind --toggle/--status and the shortcuts
   dnd.py        Plasma Do Not Disturb during focus rounds
+  history.py    history log, stats, streaks and the pup's mood (pure functions)
+  stats_window.py  stats window with the 7-day chart
   notify.py     notify-send / gdbus / kdialog + pw-play / paplay / aplay
   assets.py     asset lookup and sprite loading (folders or sheets)
   config.py     ~/.config/pomodoro-pet/config.json

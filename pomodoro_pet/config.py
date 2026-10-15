@@ -25,6 +25,7 @@ DEFAULTS: dict[str, Any] = {
     "sound": True,
     "sound_file": None,  # None -> bundled chime
     # Pet window
+    "pet_name": "Biscuit",
     "position": None,  # {"x": int, "y": int} or None for "bottom-right of primary screen"
     "scale": 1.0,
     "sprite_dir": None,  # optional override directory with custom sprites
@@ -120,6 +121,8 @@ def _sanitize(data: dict[str, Any]) -> dict[str, Any]:
         elif key == "position":
             if isinstance(value, dict) and isinstance(value.get("x"), int) and isinstance(value.get("y"), int):
                 cfg[key] = {"x": value["x"], "y": value["y"]}
+        elif key == "pet_name":
+            cfg[key] = str(value).strip()[:40] or default
         elif key in ("sound_file", "sprite_dir"):
             cfg[key] = str(value) if value else None
     return cfg

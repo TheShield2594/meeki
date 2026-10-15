@@ -64,6 +64,9 @@ class PomodoroTimer(QObject):
     phase_changed = Signal(object)  # Phase
     phase_finished = Signal(object, object)  # finished Phase, next Phase (None when the session is over)
     session_complete = Signal()
+    # every phase that ends, for the history log:
+    # Phase, seconds actually spent in it, "completed" | "skipped" | "reset", round
+    phase_ended = Signal(object, float, str, int)
 
     def __init__(
         self,
@@ -88,6 +91,7 @@ class PomodoroTimer(QObject):
         self.round = 1  # 1-based focus round
         self._deadline: float | None = None  # set while RUNNING
         self._remaining = self.duration(Phase.FOCUS)  # seconds, authoritative while not RUNNING
+        self._phase_total = float(self._remaining)  # length of the current phase when it began
         self._last_emitted: int | None = None
         self.away_seconds = 0.0  # set when the last phase ended while we weren't looking
 
@@ -113,6 +117,7 @@ class PomodoroTimer(QObject):
             self.round = rounds
         if self.state in (State.IDLE, State.COMPLETE):
             self._remaining = self.duration(self.phase)
+            self._phase_total = float(self._remaining)
             self._emit_tick(force=True)
 
     # ---- queries -------------------------------------------------------
@@ -123,6 +128,10 @@ class PomodoroTimer(QObject):
 
     def remaining_seconds(self) -> int:
         return int(math.ceil(self.remaining() - 1e-6))
+
+    def elapsed(self) -> float:
+        """Seconds spent in the current phase so far (pauses excluded)."""
+        return max(0.0, self._phase_total - self.remaining())
 
     # ---- controls ------------------------------------------------------
     def start(self) -> None:
@@ -151,6 +160,8 @@ class PomodoroTimer(QObject):
             self.start()
 
     def reset(self) -> None:
+        if self.state in (State.RUNNING, State.PAUSED) and self.elapsed() > 0:
+            self.phase_ended.emit(self.phase, self.elapsed(), "reset", self.round)
         self._qtimer.stop()
         self._reset_values()
         self.phase_changed.emit(self.phase)
@@ -158,10 +169,10 @@ class PomodoroTimer(QObject):
         self._emit_tick(force=True)
 
     def skip(self) -> None:
-        """End the current phase now (counts as finished)."""
-        if self.state in (State.IDLE, State.COMPLETE) and self.phase is Phase.FOCUS and self.round == 1:
+        """End the current phase now and move on to the next one."""
+        if self.state is State.COMPLETE or (self.state is State.IDLE and self.phase is Phase.FOCUS and self.round == 1):
             return
-        self._finish_phase()
+        self._finish_phase(skipped=True)
 
     # ---- internals -----------------------------------------------------
     def _reset_values(self) -> None:
@@ -169,6 +180,7 @@ class PomodoroTimer(QObject):
         self.round = 1
         self._deadline = None
         self._remaining = self.duration(Phase.FOCUS)
+        self._phase_total = float(self._remaining)
 
     def _set_state(self, state: State) -> None:
         if state is not self.state:
@@ -197,7 +209,11 @@ class PomodoroTimer(QObject):
             return Phase.FOCUS
         return None  # long break ends the session
 
-    def _finish_phase(self) -> None:
+    def _finish_phase(self, skipped: bool = False) -> None:
+        if skipped:
+            self.phase_ended.emit(self.phase, self.elapsed(), "skipped", self.round)
+        else:
+            self.phase_ended.emit(self.phase, self._phase_total, "completed", self.round)
         overshoot = 0.0
         if self.state is State.RUNNING and self._deadline is not None:
             overshoot = self._clock() - self._deadline
@@ -219,6 +235,7 @@ class PomodoroTimer(QObject):
             self.round += 1
         self.phase = nxt
         self._remaining = self.duration(nxt)
+        self._phase_total = float(self._remaining)
         self.phase_changed.emit(nxt)
 
         if self.auto_advance and self.state is State.RUNNING and not self.away_seconds:
@@ -228,7 +245,6 @@ class PomodoroTimer(QObject):
             self._deadline = None
             self._set_state(State.PAUSED)
         self._emit_tick(force=True)
-
 
     # ---- persistence -----------------------------------------------------
     def snapshot(self, wall: float | None = None) -> dict | None:
@@ -270,6 +286,7 @@ class PomodoroTimer(QObject):
 
         self._qtimer.stop()
         self.phase, self.round = phase, rnd
+        self._phase_total = float(self.duration(phase))
         self.phase_changed.emit(phase)
         if state is State.PAUSED:
             self._deadline = None
