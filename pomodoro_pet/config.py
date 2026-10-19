@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 import logging
 import os
+import stat
+import sys
 import tempfile
 from pathlib import Path
 from typing import Any
@@ -67,9 +69,27 @@ def config_dir() -> Path:
 
 
 def runtime_dir() -> str:
-    """Where the single-instance lock and the remote-control socket live
-    ($XDG_RUNTIME_DIR on Linux, the per-user temp dir on macOS)."""
-    return os.environ.get("XDG_RUNTIME_DIR") or tempfile.gettempdir()
+    """Where the single-instance lock and the remote-control socket live:
+    $XDG_RUNTIME_DIR, else macOS's per-user temp dir, else a private
+    /tmp/pomodoro-pet-<uid> (never the shared /tmp itself)."""
+    if os.environ.get("XDG_RUNTIME_DIR"):
+        return os.environ["XDG_RUNTIME_DIR"]
+    base = tempfile.gettempdir()
+    if sys.platform == "darwin" or not hasattr(os, "getuid"):
+        return base  # already per-user, and short enough for socket paths
+    path = os.path.join(base, f"{APP_ID}-{os.getuid()}")
+    try:
+        os.mkdir(path, 0o700)
+    except FileExistsError:
+        pass
+    except OSError as exc:
+        log.warning("Could not create %s: %s", path, exc)
+        return base
+    st = os.lstat(path)
+    if not stat.S_ISDIR(st.st_mode) or st.st_uid != os.getuid() or st.st_mode & 0o077:
+        log.warning("%s is not a private directory of ours; using %s", path, base)
+        return base
+    return path
 
 
 def config_path() -> Path:

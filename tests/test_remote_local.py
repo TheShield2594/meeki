@@ -2,6 +2,7 @@
 
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -17,12 +18,17 @@ def run_client(qapp, env, *args):
         [sys.executable, "-m", "pomodoro_pet", *args], env=env, cwd=ROOT,
         stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
     )
-    end = time.monotonic() + 20
-    while proc.poll() is None and time.monotonic() < end:
-        qapp.processEvents()
-        time.sleep(0.01)
-    out, err = proc.communicate(timeout=5)
-    return proc.returncode, out, err
+    try:
+        end = time.monotonic() + 20
+        while proc.poll() is None and time.monotonic() < end:
+            qapp.processEvents()
+            time.sleep(0.01)
+        out, err = proc.communicate(timeout=5)
+        return proc.returncode, out, err
+    finally:
+        if proc.poll() is None:
+            proc.kill()
+            proc.wait()
 
 
 def test_commands_over_local_socket(monkeypatch, qapp):
@@ -54,6 +60,7 @@ def test_commands_over_local_socket(monkeypatch, qapp):
     finally:
         service.unregister()
         lock.unlock()
+        shutil.rmtree(runtime, ignore_errors=True)
 
 
 class FakeSocket:

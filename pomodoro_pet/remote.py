@@ -24,6 +24,7 @@ import json
 import logging
 import os
 import sys
+import time
 from collections.abc import Callable
 
 from PySide6.QtCore import ClassInfo, QObject, Signal, Slot
@@ -218,13 +219,19 @@ def _send_local(method: str, args: tuple[str, ...]) -> tuple[bool, str]:
     sock.write((json.dumps([method, *args]) + "\n").encode())
     sock.flush()
     data = b""
-    while not data.endswith(b"\n") and sock.waitForReadyRead(5000):
+    deadline = time.monotonic() + 5
+    while not data.endswith(b"\n"):
+        left = int((deadline - time.monotonic()) * 1000)
+        if left <= 0 or not sock.waitForReadyRead(left):
+            break
         data += bytes(sock.readAll())
     data += bytes(sock.readAll())
     sock.abort()
     try:
         reply = json.loads(data.decode(errors="replace"))
     except ValueError:
+        return False, "no answer from Pomodoro Pet"
+    if not isinstance(reply, dict):
         return False, "no answer from Pomodoro Pet"
     if not reply.get("ok"):
         return False, str(reply.get("error", "error"))

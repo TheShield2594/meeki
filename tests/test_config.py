@@ -62,9 +62,12 @@ def test_stale_lock_detection_looks_at_the_real_process(tmp_path):
         def getLockInfo(self):  # noqa: N802
             return (self.pid, "host", "python3")
 
-    other = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(30)"])
-    pet = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(30)", "-m", "pomodoro_pet"])
+    code = "import time; print('ready', flush=True); time.sleep(30)"
+    other = subprocess.Popen([sys.executable, "-c", code], stdout=subprocess.PIPE, text=True)
+    pet = subprocess.Popen([sys.executable, "-c", code, "-m", "pomodoro_pet"], stdout=subprocess.PIPE, text=True)
     try:
+        # until they print, they may not have exec'd yet (still showing our command line)
+        assert other.stdout.readline() == pet.stdout.readline() == "ready\n"
         assert lock_owner_is_pet(FakeLock(other.pid)) is False  # a reused PID: stale
         assert lock_owner_is_pet(FakeLock(pet.pid)) is True
         assert lock_owner_is_pet(FakeLock(999_999_999)) is False  # long gone
@@ -72,3 +75,25 @@ def test_stale_lock_detection_looks_at_the_real_process(tmp_path):
     finally:
         other.kill()
         pet.kill()
+
+
+def test_runtime_dir_fallback_is_private(tmp_path, monkeypatch):
+    import os
+    import stat
+    import sys
+
+    from pomodoro_pet import config
+
+    monkeypatch.setenv("XDG_RUNTIME_DIR", "/run/user/test")
+    assert config.runtime_dir() == "/run/user/test"
+    monkeypatch.delenv("XDG_RUNTIME_DIR")
+    monkeypatch.setattr(config.tempfile, "gettempdir", lambda: str(tmp_path))
+    if sys.platform == "darwin":
+        assert config.runtime_dir() == str(tmp_path)  # macOS's temp dir is per-user already
+        return
+    path = config.runtime_dir()
+    assert path == str(tmp_path / f"pomodoro-pet-{os.getuid()}")
+    assert stat.S_IMODE(os.stat(path).st_mode) == 0o700
+    assert config.runtime_dir() == path  # reused
+    os.chmod(path, 0o777)  # not private (e.g. pre-created by someone else): don't use it
+    assert config.runtime_dir() == str(tmp_path)
