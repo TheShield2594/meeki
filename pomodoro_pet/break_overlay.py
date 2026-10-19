@@ -58,6 +58,7 @@ class _OverlayWindow(QWidget):
         )
         self.setWindowTitle(OVERLAY_TITLE)
         self.setAttribute(Qt.WA_TranslucentBackground, True)
+        self.setAttribute(Qt.WA_MacAlwaysShowToolWindow, True)
         self.setStyleSheet(theme.overlay_style())  # light/dark like the desktop
         self._screen = screen
         self.setScreen(screen)

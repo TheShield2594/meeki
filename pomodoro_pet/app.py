@@ -7,11 +7,10 @@ import logging
 import os
 import signal
 import sys
-import tempfile
 import time
 
 from . import __version__
-from .config import APP_ID, Config, config_dir, load_session, sanitize, save_session
+from .config import APP_ID, Config, config_dir, load_session, runtime_dir, sanitize, save_session
 from .history import History, format_minutes, mood, recent_intentions, stats_text, summarize
 from .i18n import _, ngettext
 from .remote import COMMANDS, PetService, send_command
@@ -264,7 +263,8 @@ class Controller:
 
         from .wayland import ORIGINAL_QT_QPA_PLATFORM
 
-        args = ["-m", "pomodoro_pet", "--restarted"]
+        # A frozen build (the macOS app) is its own executable.
+        args = ["--restarted"] if getattr(sys, "frozen", False) else ["-m", "pomodoro_pet", "--restarted"]
         if self.settings_window is not None and self.settings_window.isVisible():
             args.append("--settings")
         env = QProcessEnvironment.systemEnvironment()
@@ -768,17 +768,31 @@ def lock_owner_is_pet(lock) -> bool:
         pid = int(info[0])
     except (TypeError, ValueError, IndexError):
         return True  # can't tell: assume it is
-    if not os.path.isdir("/proc"):
-        return True
+    if os.path.isdir("/proc"):
+        try:
+            with open(f"/proc/{pid}/cmdline", "rb") as fh:
+                args = fh.read().decode(errors="replace").split("\0")
+        except OSError:
+            return False  # gone
+        # `python -m pomodoro_pet ...` or the installed `pomodoro-pet` launcher script
+        module = any(a == "-m" and b == "pomodoro_pet" for a, b in zip(args, args[1:], strict=False))
+        script = any(os.path.basename(arg) == APP_ID for arg in args[:2])
+        return module or script
+    # macOS: no /proc, ask ps (the command line comes back as one string)
+    import re
+    import subprocess
+
     try:
-        with open(f"/proc/{pid}/cmdline", "rb") as fh:
-            args = fh.read().decode(errors="replace").split("\0")
-    except OSError:
+        out = subprocess.run(
+            ["ps", "-ww", "-o", "command=", "-p", str(pid)], capture_output=True, text=True, timeout=3
+        )
+    except (OSError, subprocess.SubprocessError):
+        return True  # can't tell
+    command = out.stdout.strip()
+    if not command:
         return False  # gone
-    # `python -m pomodoro_pet ...` or the installed `pomodoro-pet` launcher script
-    module = any(a == "-m" and b == "pomodoro_pet" for a, b in zip(args, args[1:], strict=False))
-    script = any(os.path.basename(arg) == APP_ID for arg in args[:2])
-    return module or script
+    # `python -m pomodoro_pet`, the launcher script or the app's .../Contents/MacOS/pomodoro-pet
+    return bool(re.search(r"(^|\s)-m pomodoro_pet(\s|$)", command) or re.search(r"(^|/)pomodoro-pet(\s|$)", command))
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -809,11 +823,10 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     # One pet at a time. If one is already running, this invocation is a remote
-    # control: pass the command (or "show") to it over D-Bus and exit.
+    # control: pass the command (or "show") to it (D-Bus, or a local socket on macOS) and exit.
     from PySide6.QtCore import QLockFile
 
-    runtime_dir = os.environ.get("XDG_RUNTIME_DIR") or tempfile.gettempdir()
-    lock = QLockFile(os.path.join(runtime_dir, f"{APP_ID}.lock"))
+    lock = QLockFile(os.path.join(runtime_dir(), f"{APP_ID}.lock"))
     lock.setStaleLockTime(0)
     # After "Restart now" the old instance may still be shutting down: wait for it.
     if not lock.tryLock(10_000 if args.restarted else 100) and not lock_owner_is_pet(lock):
@@ -825,7 +838,7 @@ def main(argv: list[str] | None = None) -> int:
     if not lock.isLocked() and not lock.tryLock(100):
         from PySide6.QtCore import QCoreApplication
 
-        _core = QCoreApplication(sys.argv[:1])  # noqa: F841 (needed for D-Bus)
+        _core = QCoreApplication(sys.argv[:1])  # noqa: F841 (needed for D-Bus / QLocalSocket)
         if args.intention is not None:
             ok, reply = send_command("setintention", args.intention)
             if not ok:

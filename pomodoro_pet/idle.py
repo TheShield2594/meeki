@@ -7,6 +7,7 @@ input, and whether the screen is locked:
      (KDE Plasma implements both, on X11 and Wayland)
   2. org.gnome.Mutter.IdleMonitor (GNOME)
   3. the XScreenSaver extension via libXss (plain X11 sessions)
+  4. Quartz (CoreGraphics) on macOS, which also says whether the screen is locked
 
 ActivityTracker polls it and turns the numbers into events (you went away,
 you came back, you were active for N seconds). BreakCoach decides when to
@@ -19,6 +20,7 @@ from __future__ import annotations
 import ctypes
 import ctypes.util
 import logging
+import sys
 import time
 from collections.abc import Callable
 
@@ -37,6 +39,7 @@ class IdleSource:
         self._ifaces: dict[tuple[str, str], object] = {}
         self._backend: Callable[[], float | None] | None = None
         self._x11 = None
+        self._mac = _Quartz.open() if sys.platform == "darwin" else None
         try:
             from PySide6.QtDBus import QDBusConnection
 
@@ -88,6 +91,8 @@ class IdleSource:
 
     # ---- public --------------------------------------------------------
     def idle_seconds(self) -> float | None:
+        if self._mac is not None:
+            return self._mac.idle_seconds()
         if self._backend is not None:
             value = self._backend()
             if value is not None:
@@ -102,11 +107,62 @@ class IdleSource:
         return None
 
     def locked(self) -> bool:
+        if self._mac is not None:
+            return self._mac.locked()
         for path in ("/ScreenSaver", "/org/freedesktop/ScreenSaver"):
             active = self._call("org.freedesktop.ScreenSaver", path, "org.freedesktop.ScreenSaver", "GetActive")
             if isinstance(active, bool):
                 return active
         return False
+
+
+class _Quartz:
+    """macOS: seconds since the last input event, and the screen-lock flag
+    from the current login session (both through ctypes, no PyObjC)."""
+
+    _ANY_INPUT = 0xFFFFFFFF  # kCGAnyInputEventType
+    _HID_STATE = 1  # kCGEventSourceStateHIDSystemState
+    _UTF8 = 0x08000100  # kCFStringEncodingUTF8
+
+    def __init__(self, cg, cf):
+        self.cg, self.cf = cg, cf
+        self._locked_key = cf.CFStringCreateWithCString(None, b"CGSSessionScreenIsLocked", self._UTF8)
+
+    @classmethod
+    def open(cls) -> _Quartz | None:
+        try:
+            cg = ctypes.CDLL("/System/Library/Frameworks/CoreGraphics.framework/CoreGraphics")
+            cf = ctypes.CDLL("/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation")
+            cg.CGEventSourceSecondsSinceLastEventType.restype = ctypes.c_double
+            cg.CGEventSourceSecondsSinceLastEventType.argtypes = [ctypes.c_int32, ctypes.c_uint32]
+            cg.CGSessionCopyCurrentDictionary.restype = ctypes.c_void_p
+            cg.CGSessionCopyCurrentDictionary.argtypes = []
+            cf.CFStringCreateWithCString.restype = ctypes.c_void_p
+            cf.CFStringCreateWithCString.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_uint32]
+            cf.CFDictionaryGetValue.restype = ctypes.c_void_p
+            cf.CFDictionaryGetValue.argtypes = [ctypes.c_void_p, ctypes.c_void_p]
+            cf.CFBooleanGetValue.restype = ctypes.c_bool
+            cf.CFBooleanGetValue.argtypes = [ctypes.c_void_p]
+            cf.CFRelease.argtypes = [ctypes.c_void_p]
+            log.info("Idle detection via Quartz")
+            return cls(cg, cf)
+        except (OSError, AttributeError) as exc:
+            log.info("Quartz idle detection unavailable: %s", exc)
+            return None
+
+    def idle_seconds(self) -> float | None:
+        value = self.cg.CGEventSourceSecondsSinceLastEventType(self._HID_STATE, self._ANY_INPUT)
+        return value if value >= 0 else None
+
+    def locked(self) -> bool:
+        session = self.cg.CGSessionCopyCurrentDictionary()
+        if not session:
+            return False
+        try:
+            value = self.cf.CFDictionaryGetValue(session, self._locked_key) if self._locked_key else None
+            return bool(value) and self.cf.CFBooleanGetValue(value)
+        finally:
+            self.cf.CFRelease(session)
 
 
 class _XScreenSaver:

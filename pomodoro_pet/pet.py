@@ -53,6 +53,7 @@ class PetWindow(QWidget):
         )
         self.setAttribute(Qt.WA_TranslucentBackground, True)
         self.setAttribute(Qt.WA_NoSystemBackground, True)
+        self.setAttribute(Qt.WA_MacAlwaysShowToolWindow, True)  # macOS hides tool windows of inactive apps
         self.setMouseTracking(True)
 
         self.set_scale(scale)

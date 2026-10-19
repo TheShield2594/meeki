@@ -1,4 +1,6 @@
 import os
+import shutil
+import tempfile
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
@@ -17,6 +19,12 @@ def controller(tmp_path, monkeypatch, qapp):
     for var, sub in (("XDG_CONFIG_HOME", "config"), ("XDG_STATE_HOME", "state"), ("XDG_DATA_HOME", "data")):
         monkeypatch.setenv(var, str(tmp_path / sub))
     monkeypatch.setenv("DBUS_SESSION_BUS_ADDRESS", "unix:path=/nonexistent")  # keep off the real bus
+    # ...and off a running pet's remote-control socket (short path: macOS caps socket paths at 104 bytes)
+    runtime = tempfile.mkdtemp(prefix="pp")
+    monkeypatch.setenv("XDG_RUNTIME_DIR", runtime)
+    import pomodoro_pet.idle
+
+    monkeypatch.setattr(pomodoro_pet.idle._Quartz, "open", classmethod(lambda cls: None))  # no real idle time on macOS
     from pomodoro_pet.app import Controller
     from pomodoro_pet.config import Config
 
@@ -25,3 +33,4 @@ def controller(tmp_path, monkeypatch, qapp):
     yield c
     c.shutdown()
     c.pet.close()
+    shutil.rmtree(runtime, ignore_errors=True)
