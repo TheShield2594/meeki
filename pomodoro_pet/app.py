@@ -114,6 +114,9 @@ class Controller:
         self._overtime_saver.timeout.connect(lambda: self.timer.in_overtime and self._save_session())
         self._overtime_saver.start()
 
+        self.updates = None
+        self._update_checks()
+
         self.kwin = None
         position = cfg["position"]
         if running_on_wayland():
@@ -224,6 +227,8 @@ class Controller:
             if self.stats_window is not None:
                 self.stats_window.pet_name = c["pet_name"]
             self._refresh_mood(react=False)
+        if "check_for_updates" in keys:
+            self._update_checks()
         if "break_enforcement" in keys and c["break_enforcement"] != "overlay":
             self.overlay.end()
         self._update_dnd()
@@ -279,6 +284,37 @@ class Controller:
             log.error("Couldn't restart Pomodoro Pet")
             return
         self.quit()
+
+    # ---- update notices --------------------------------------------------
+    def _update_checks(self) -> None:
+        from .updates import UpdateChecker
+
+        if self.cfg["check_for_updates"] and self.updates is None:
+            self.updates = UpdateChecker()
+            self.updates.update_available.connect(self._on_update_available)
+            self.updates.start()
+        elif not self.cfg["check_for_updates"] and self.updates is not None:
+            self.updates.stop()
+            self.updates = None
+
+    def _on_update_available(self, version: str, page: str) -> None:
+        from .notify import notify_with_actions
+
+        self.say(_("Psst! A new version of me is out ({version}) 🎉").format(version=version))
+        if self.cfg["notifications"]:
+            notify_with_actions(
+                _("Pomodoro Pet {version} is available").format(version=version),
+                _("You have {current}. Update the way you installed it (your package manager, "
+                  "a new download, or git pull).").format(current=__version__),
+                [("open", _("See what's new"))],
+                lambda _choice: self._open_url(page),
+            )
+
+    def _open_url(self, url: str) -> None:
+        from PySide6.QtCore import QUrl
+        from PySide6.QtGui import QDesktopServices
+
+        QDesktopServices.openUrl(QUrl(url))
 
     # ---- timer state ---------------------------------------------------
     def _on_timer_changed(self, *_args) -> None:
@@ -431,6 +467,10 @@ class Controller:
             lambda: self.popover.popup_near(self.pet, self.pet.interaction_rect()))
         add(_("Stats"), "view-statistics", self.show_stats)
         add(_("Settings"), "configure", self.show_settings)
+        if self.updates is not None and self.updates.latest:
+            version, page = self.updates.latest
+            add(_("Update available: {version}").format(version=version), "system-software-update",
+                lambda: self._open_url(page))
         menu.addSeparator()
         add(_("Quit"), "application-exit", self.quit)
         menu.exec(pos)
@@ -754,6 +794,8 @@ class Controller:
 
         cancel_pending()
         self.activity.stop()
+        if self.updates is not None:
+            self.updates.stop()
         self.overlay.end()
         self.dnd.set_active(False)
         self.service.unregister()

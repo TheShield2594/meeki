@@ -25,8 +25,11 @@ def controller(tmp_path, monkeypatch, qapp):
     import pomodoro_pet.idle
 
     monkeypatch.setattr(pomodoro_pet.idle._Quartz, "open", classmethod(lambda cls: None))  # no real idle time on macOS
+    import pomodoro_pet.config
     from pomodoro_pet.app import Controller
     from pomodoro_pet.config import Config
+
+    monkeypatch.setitem(pomodoro_pet.config.DEFAULTS, "check_for_updates", False)  # no network from tests
 
     c = Controller(qapp, Config().load())
     c.cfg["notifications"] = c.cfg["sound"] = False  # no real popups or beeps from tests

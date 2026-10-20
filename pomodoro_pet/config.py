@@ -47,6 +47,8 @@ DEFAULTS: dict[str, Any] = {
     "kwin_integration": True,  # use KWin scripting for keep-above + positioning on Wayland
     # Your own scripts in ~/.config/pomodoro-pet/hooks.d/ run on timer events
     "hooks_enabled": True,
+    # Once a day, ask GitHub whether a newer release is out (and say so once per version)
+    "check_for_updates": True,
     # Experimental (stub): hide the pet and show the countdown in the system tray instead
     "minimize_to_tray": False,
 }

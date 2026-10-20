@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: pomodoro-pet 0.2.0\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-15 17:08+0000\n"
+"POT-Creation-Date: 2026-10-20 00:26+0000\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -24,6 +24,27 @@ msgstr ""
 
 #: pomodoro_pet/app.py
 msgid "I missed you! 🥺"
+msgstr ""
+
+#: pomodoro_pet/app.py
+#, python-brace-format
+msgid "Psst! A new version of me is out ({version}) 🎉"
+msgstr ""
+
+#: pomodoro_pet/app.py
+#, python-brace-format
+msgid "Pomodoro Pet {version} is available"
+msgstr ""
+
+#: pomodoro_pet/app.py
+#, python-brace-format
+msgid ""
+"You have {current}. Update the way you installed it (your package manager, a "
+"new download, or git pull)."
+msgstr ""
+
+#: pomodoro_pet/app.py
+msgid "See what's new"
 msgstr ""
 
 #: pomodoro_pet/app.py
@@ -96,6 +117,11 @@ msgstr ""
 
 #: pomodoro_pet/app.py
 msgid "Settings"
+msgstr ""
+
+#: pomodoro_pet/app.py
+#, python-brace-format
+msgid "Update available: {version}"
 msgstr ""
 
 #: pomodoro_pet/app.py
@@ -929,6 +955,19 @@ msgstr ""
 msgid ""
 "Executables in the hooks folder run on phase start/end, pause, resume, "
 "overtime, session complete, away and back. See README.txt there."
+msgstr ""
+
+#: pomodoro_pet/settings_window.py
+msgid "Tell me when a new version is out"
+msgstr ""
+
+#: pomodoro_pet/settings_window.py
+msgid "Once a day, asks GitHub for the latest release. Nothing else is sent."
+msgstr ""
+
+#: pomodoro_pet/settings_window.py
+#, python-brace-format
+msgid "You have version {version}."
 msgstr ""
 
 #: pomodoro_pet/stats_window.py

@@ -23,6 +23,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from . import __version__
 from .i18n import _
 from .popover import make_spin
 
@@ -309,6 +310,9 @@ class SettingsWindow(QWidget):
             self._check("hooks_enabled", _("Run my hook scripts on timer events"),
                         _("Executables in the hooks folder run on phase start/end, pause, resume, overtime, "
                         "session complete, away and back. See README.txt there.")),
+            self._check("check_for_updates", _("Tell me when a new version is out"),
+                        _("Once a day, asks GitHub for the latest release. Nothing else is sent.")),
+            _hint(_("You have version {version}.").format(version=__version__)),
             files,
         )
 
