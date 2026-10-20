@@ -6,6 +6,7 @@ import time
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 import pytest
+from PySide6.QtCore import QCoreApplication, QEvent
 
 from pomodoro_pet import updates
 from pomodoro_pet.updates import UpdateChecker, is_newer, parse_version
@@ -67,7 +68,9 @@ def run_check(qapp, checker, server):
     checker.check()
     deadline = time.monotonic() + 10
     while checker.busy and time.monotonic() < deadline:
-        qapp.processEvents()
+        # Only the checker's queued reply: a full processEvents() here can deliver stale
+        # events to the half-torn-down controllers of earlier tests and crash.
+        QCoreApplication.sendPostedEvents(checker, QEvent.Type.MetaCall)
         time.sleep(0.01)
     assert not checker.busy, "the check never finished"
     return server.hits - hits
