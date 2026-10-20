@@ -1,0 +1,77 @@
+name: Release
+
+# Push a tag like v0.3.0 (matching the version in pyproject.toml) to publish a
+# GitHub release with the macOS .dmg files. Installed pets check
+# releases/latest once a day and tell their humans about it.
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  draft:
+    name: Draft the release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+      - name: Tag matches the package version
+        run: |
+          version=$(sed -n 's/^version = "\(.*\)"/\1/p' pyproject.toml)
+          init=$(sed -n 's/^__version__ = "\(.*\)"/\1/p' pomodoro_pet/__init__.py)
+          if [ "v$version" != "$GITHUB_REF_NAME" ] || [ "$init" != "$version" ]; then
+            echo "Tag $GITHUB_REF_NAME, pyproject.toml $version, __init__.py $init: they must agree" >&2
+            exit 1
+          fi
+      - name: Create a draft release (published once the downloads are attached)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --draft --verify-tag --generate-notes --title "Pomodoro Pet ${GITHUB_REF_NAME#v}"
+
+  macos-app:
+    name: macOS app (${{ matrix.arch }})
+    needs: draft
+    permissions:
+      contents: write
+    strategy:
+      matrix:
+        include:
+          - runner: macos-15
+            arch: arm64
+          - runner: macos-15-intel
+            arch: x86_64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: "3.12"
+      - name: Python dependencies
+        run: pip install PySide6-Essentials pyinstaller pillow
+      - name: Build the app and .dmg
+        run: sh packaging/macos/build-app.sh
+      - name: Smoke-test the app
+        run: '"dist/Pomodoro Pet.app/Contents/MacOS/pomodoro-pet" --version'
+      - name: Attach the .dmg
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$GITHUB_REF_NAME" dist/*.dmg --repo "$GITHUB_REPOSITORY" --clobber
+
+  publish:
+    name: Publish the release
+    needs: macos-app
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release edit "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --draft=false --latest

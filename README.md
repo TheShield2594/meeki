@@ -48,6 +48,9 @@ with a pink bow.
   finish rounds and build streaks, floats hearts when happy, and sulks under a
   rain cloud if you skip or work through breaks, abandon rounds or stay away
   for days
+- **Update notices:** once a day it checks GitHub for a new release and lets
+  you know once per version (pup, notification, right-click menu). Turn it off
+  in *Settings → Advanced*
 - The little **×** quits completely. No tray icon, no background process
 - Settings live in `~/.config/pomodoro-pet/config.json`
 
@@ -120,9 +123,10 @@ Optional dependencies: `libnotify` (notifications), `pipewire` or `libpulse`
 There's a macOS build too: a self-contained `Pomodoro Pet.app` in a `.dmg`,
 for Apple silicon (`arm64`) and Intel (`x86_64`), macOS 12 or newer.
 
-**Get it:** every CI run on GitHub builds both. Open the run under *Actions*
-and download `pomodoro-pet-macos-arm64` or `pomodoro-pet-macos-x86_64` from
-its artifacts. Open the `.dmg` and drag the app to *Applications*.
+**Get it:** download the `.dmg` for your Mac from the latest
+[release](https://github.com/TheShield2594/meeki/releases/latest). Every CI run
+also builds both: open the run under *Actions* and download
+`pomodoro-pet-macos-arm64` or `pomodoro-pet-macos-x86_64` from its artifacts. Open the `.dmg` and drag the app to *Applications*.
 
 The app isn't signed with an Apple Developer ID, so the first launch is
 blocked. Either right-click the app and choose **Open**, or allow it in
@@ -393,7 +397,7 @@ Settings.
 | **Focus & breaks** | Do Not Disturb, pause when away (minutes, auto-resume), break enforcement |
 | **Pet** | name, size (50–300 %), custom sprite folder, hide in fullscreen, idle animations and naps |
 | **Notifications & sound** | notifications, sounds, custom phase-end sound with a Test button |
-| **Advanced** | display backend and KWin integration (with **Restart now**), tray stub, hook scripts, open the settings/history/hooks folders |
+| **Advanced** | display backend and KWin integration (with **Restart now**), tray stub, hook scripts, update notices and your version, open the settings/history/hooks folders |
 
 Only the display backend and KWin integration need a restart. The Advanced tab
 says so and offers **Restart now**, which starts a fresh instance and quits
@@ -452,6 +456,7 @@ Everything is stored in `~/.config/pomodoro-pet/config.json` (or
 | `pet_name` | `"Biscuit"` | what the pup is called |
 | `hide_in_fullscreen` | `true` | step aside while a fullscreen app covers the pup (Plasma) |
 | `hooks_enabled` | `true` | run the scripts in `hooks.d/` on timer events |
+| `check_for_updates` | `true` | once a day, check GitHub for a newer release and say so (see below) |
 | `idle_animations` | `true` | look around, yawn, scratch, stretch and nap when the timer isn't running |
 | `position` | `null` | last window position (`{"x":…, "y":…}`), managed for you |
 | `scale` | `1.0` | pet size multiplier (0.5–4) |
@@ -462,6 +467,21 @@ Everything is stored in `~/.config/pomodoro-pet/config.json` (or
 
 If you edit the file by hand, do it while the app is closed. The app rewrites
 it on quit. Otherwise just use the Settings window.
+
+### Update notices
+
+With `check_for_updates` on (the default), the app asks GitHub for the latest
+release a minute after it starts and then about once a day
+(`https://api.github.com/repos/TheShield2594/meeki/releases/latest`, nothing
+else is sent). When there's a newer version, the pup says so, a notification
+offers **See what's new**, and the right-click menu shows *Update available*
+until you update. Each version is announced once. Offline, or no releases yet?
+It stays quiet.
+
+It doesn't update itself. Update the way you installed it: your AUR helper or
+`makepkg` for the Arch packages, a new `.dmg` on macOS, `git pull` for a
+checkout. The last check time and the last announced version are kept in
+`~/.local/state/pomodoro-pet/updates.json`.
 
 ## Custom sprites
 
@@ -581,6 +601,19 @@ python tools/generate_assets.py   # regenerate placeholder sprites/icon/chime
   and the `.dmg` with PyInstaller (`packaging/macos/build-app.sh`), smoke-test
   the app binary and upload the `.dmg` as an artifact.
 
+**Releases:** `.github/workflows/release.yml` publishes a GitHub release when
+you push a version tag. Bump the version in `pyproject.toml`,
+`pomodoro_pet/__init__.py` and both PKGBUILDs, then:
+
+```bash
+git tag v0.3.0 && git push origin v0.3.0
+```
+
+The workflow checks that the tag matches the version, drafts the release with
+generated notes, builds and attaches both macOS `.dmg` files, then publishes
+it. Installed pets pick it up within a day (the repository has to be public
+for the check to see it).
+
 **AUR:** `packaging/aur/` has a `pomodoro-pet-git` PKGBUILD that builds the
 latest commit from GitHub, plus its `.SRCINFO`. To publish:
 
@@ -615,13 +648,14 @@ pomodoro_pet/
   tray.py       experimental tray stub
   theme.py      light/dark scheme and accent colour
   hooks.py      user hook scripts (hooks.d/)
+  updates.py    daily "is there a newer release?" check (GitHub releases/latest)
   i18n.py       gettext setup
 assets/         sprites, icon, chime
 po/             translation template (pomodoro-pet.pot) and translations
 packaging/      .desktop, Arch + AUR PKGBUILDs, install-files.sh, KWin rule, user install script,
                 macos/ (PyInstaller spec + .app/.dmg build script)
 tools/          asset generator, i18n tool (extract / compile / check)
-.github/        CI workflow
+.github/        CI and release workflows
 tests/          unit tests + an end-to-end D-Bus test (private bus, fake notification server)
 ```
 
