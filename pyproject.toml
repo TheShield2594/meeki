@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pomodoro-pet"
-version = "0.2.0"
+version = "0.3.0"
 description = "A Pomodoro desktop pet (Bichon x Biewer Terrier pup) for KDE Plasma"
 readme = "README.md"
 license = "MIT"

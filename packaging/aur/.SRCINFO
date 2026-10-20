@@ -1,6 +1,6 @@
 pkgbase = pomodoro-pet-git
 	pkgdesc = A Pomodoro desktop pet (Bichon x Biewer Terrier pup) for KDE Plasma
-	pkgver = 0.2.0
+	pkgver = 0.3.0
 	pkgrel = 1
 	url = https://github.com/TheShield2594/meeki
 	arch = any

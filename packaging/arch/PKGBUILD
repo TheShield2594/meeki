@@ -3,7 +3,7 @@
 # Builds from this source checkout:
 #   cd packaging/arch && makepkg -si
 pkgname=pomodoro-pet
-pkgver=0.2.0
+pkgver=0.3.0
 pkgrel=1
 pkgdesc="A Pomodoro desktop pet (Bichon x Biewer Terrier pup) for KDE Plasma"
 arch=('any')
