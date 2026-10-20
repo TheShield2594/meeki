@@ -19,6 +19,7 @@ import re
 import ssl
 import threading
 import time
+import urllib.error
 import urllib.request
 from pathlib import Path
 
@@ -42,8 +43,8 @@ def parse_version(text: str) -> tuple[int, ...] | None:
     return tuple(int(part) for part in m.group(1).split(".")) if m else None
 
 
-def is_newer(latest: str, current: str = __version__) -> bool:
-    new, cur = parse_version(latest), parse_version(current)
+def is_newer(latest: str, current: str | None = None) -> bool:
+    new, cur = parse_version(latest), parse_version(__version__ if current is None else current)
     if new is None or cur is None:
         return False
     width = max(len(new), len(cur))
@@ -145,11 +146,15 @@ class UpdateChecker(QObject):
         if self._stopped:
             return
         state = load_state(self.state_file)
-        state["last_check"] = time.time()
         if isinstance(result, Exception):
             log.debug("Update check failed: %s", result)
-            save_state(state, self.state_file)
+            # Offline or timed out (say, just after waking up): try again next hour. Only a
+            # check that reached GitHub (a 404 before the first release, odd JSON) counts.
+            if isinstance(result, urllib.error.HTTPError) or not isinstance(result, OSError):
+                state["last_check"] = time.time()
+                save_state(state, self.state_file)
             return
+        state["last_check"] = time.time()
         tag, page = result
         version = tag.lstrip("v")
         if is_newer(version):

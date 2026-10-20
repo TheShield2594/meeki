@@ -64,7 +64,7 @@ def release(tag):
 
 
 def run_check(qapp, checker, server):
-    hits = server.hits
+    hits = server.hits if server else 0
     checker.check()
     deadline = time.monotonic() + 10
     while checker.busy and time.monotonic() < deadline:
@@ -73,7 +73,7 @@ def run_check(qapp, checker, server):
         QCoreApplication.sendPostedEvents(checker, QEvent.Type.MetaCall)
         time.sleep(0.01)
     assert not checker.busy, "the check never finished"
-    return server.hits - hits
+    return server.hits - hits if server else 0
 
 
 @pytest.fixture
@@ -116,6 +116,17 @@ def test_quiet_when_up_to_date_or_failing(qapp, server, checker):
     run_check(qapp, checker, server)
     assert checker.seen == [] and checker.latest is None
     assert updates.load_state(checker.state_file)["last_check"] > 0
+
+
+def test_offline_check_is_retried_next_hour(qapp, checker, monkeypatch):
+    monkeypatch.setattr(checker, "url", "http://127.0.0.1:9/")  # nothing listens on the discard port
+    run_check(qapp, checker, None)
+    assert "last_check" not in updates.load_state(checker.state_file)
+
+
+def test_compares_with_the_running_version(monkeypatch):
+    monkeypatch.setattr(updates, "__version__", "1.0.0")
+    assert not is_newer("0.9.0") and is_newer("1.0.1")
 
 
 def test_checks_at_most_once_a_day(qapp, server, checker):

@@ -32,7 +32,18 @@ jobs:
       - name: Create a draft release (published once the downloads are attached)
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --draft --verify-tag --generate-notes --title "Pomodoro Pet ${GITHUB_REF_NAME#v}"
+        run: |
+          # A re-run reuses its draft; a tag that's already published stays as it is.
+          if draft=$(gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft 2>/dev/null); then
+            if [ "$draft" != "true" ]; then
+              echo "Release $GITHUB_REF_NAME is already published" >&2
+              exit 1
+            fi
+            echo "Reusing the draft release for $GITHUB_REF_NAME"
+          else
+            gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --draft --verify-tag \
+              --generate-notes --title "Pomodoro Pet ${GITHUB_REF_NAME#v}"
+          fi
 
   macos-app:
     name: macOS app (${{ matrix.arch }})
@@ -74,4 +85,4 @@ jobs:
     steps:
       - env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release edit "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --draft=false --latest
+        run: gh release edit "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --draft=false
