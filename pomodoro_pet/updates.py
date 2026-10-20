@@ -2,8 +2,8 @@
 
 About once a day the app asks GitHub for the latest release
 (releases/latest skips drafts and pre-releases) and compares its tag with
-__version__. That is the only network request the app makes, it runs
-asynchronously through Qt, and any failure (offline, no releases yet, rate
+__version__. That is the only network request the app makes, it runs in a
+background thread, and any failure (offline, no releases yet, rate
 limit) is silently ignored. Turn it off with "check_for_updates": false.
 
 When a check last ran and which version we already announced live in
@@ -16,10 +16,13 @@ import json
 import logging
 import os
 import re
+import ssl
+import threading
 import time
+import urllib.request
 from pathlib import Path
 
-from PySide6.QtCore import QObject, QTimer, QUrl, Signal
+from PySide6.QtCore import QObject, Qt, QTimer, Signal
 
 from . import __version__
 from .config import _write_json_atomic, session_path
@@ -67,18 +70,41 @@ def save_state(data: dict, path: Path | None = None) -> None:
         log.debug("Could not save update state: %s", exc)
 
 
+def _ssl_context() -> ssl.SSLContext:
+    ctx = ssl.create_default_context()
+    if not ctx.cert_store_stats()["x509_ca"] and os.path.isfile("/etc/ssl/cert.pem"):
+        # python.org's macOS Python (and so the frozen app) ships no CA bundle of its own
+        ctx.load_verify_locations("/etc/ssl/cert.pem")
+    return ctx
+
+
+def fetch_latest(url: str, timeout: float = 15) -> tuple[str, str]:
+    """(tag, release page) of the latest release. Raises on any failure."""
+    request = urllib.request.Request(url, headers={
+        "Accept": "application/vnd.github+json",
+        "User-Agent": f"pomodoro-pet/{__version__}",
+    })
+    context = _ssl_context() if url.startswith("https:") else None
+    with urllib.request.urlopen(request, timeout=timeout, context=context) as response:
+        data = json.loads(response.read(1_000_000).decode())
+    return str(data["tag_name"]), str(data.get("html_url") or RELEASES_PAGE)
+
+
 class UpdateChecker(QObject):
-    """Emits update_available(version, url) once per new release."""
+    """Emits update_available(version, url) once per new release. The request
+    runs in a background thread, so a slow network never stalls the pet."""
 
     update_available = Signal(str, str)
+    _done = Signal(object)  # from the worker thread: (tag, page) or the exception
 
     def __init__(self, url: str | None = None, state_file: Path | None = None):
         super().__init__()
         self.url = url or os.environ.get("POMODORO_PET_UPDATE_URL") or LATEST_URL
         self.state_file = state_file
         self.latest: tuple[str, str] | None = None  # (version, page) of a newer release, once known
-        self._manager = None
-        self._reply = None
+        self.busy = False
+        self._stopped = False
+        self._done.connect(self._on_done, Qt.ConnectionType.QueuedConnection)
         # Hourly, so a laptop that slept through the day still checks soon after waking.
         self._timer = QTimer(self, interval=60 * 60 * 1000)
         self._timer.timeout.connect(self.check_if_due)
@@ -86,14 +112,14 @@ class UpdateChecker(QObject):
         self._first.timeout.connect(self.check_if_due)
 
     def start(self) -> None:
+        self._stopped = False
         self._first.start()
         self._timer.start()
 
     def stop(self) -> None:
+        self._stopped = True  # a check still in flight is ignored when it lands
         self._first.stop()
         self._timer.stop()
-        if self._reply is not None:
-            self._reply.abort()
 
     def check_if_due(self) -> None:
         last = load_state(self.state_file).get("last_check", 0)
@@ -101,40 +127,30 @@ class UpdateChecker(QObject):
             self.check()
 
     def check(self) -> None:
-        from PySide6.QtNetwork import QNetworkAccessManager, QNetworkRequest
-
-        if self._reply is not None:
+        if self.busy:
             return  # one at a time
-        if self._manager is None:
-            self._manager = QNetworkAccessManager(self)
-        request = QNetworkRequest(QUrl(self.url))
-        request.setRawHeader(b"Accept", b"application/vnd.github+json")
-        request.setRawHeader(b"User-Agent", f"pomodoro-pet/{__version__}".encode())
-        request.setTransferTimeout(15_000)
-        self._reply = self._manager.get(request)
-        self._reply.finished.connect(self._on_finished)
+        self.busy = True
 
-    def _on_finished(self) -> None:
-        from PySide6.QtNetwork import QNetworkReply
+        def work() -> None:
+            try:
+                result = fetch_latest(self.url)
+            except Exception as exc:  # offline, 404, rate limit, bad JSON: all just "no news"
+                result = exc
+            self._done.emit(result)
 
-        reply, self._reply = self._reply, None
-        reply.deleteLater()
-        if reply.error() == QNetworkReply.NetworkError.OperationCanceledError:
+        threading.Thread(target=work, name="update-check", daemon=True).start()
+
+    def _on_done(self, result) -> None:
+        self.busy = False
+        if self._stopped:
             return
         state = load_state(self.state_file)
         state["last_check"] = time.time()
-        if reply.error() != QNetworkReply.NetworkError.NoError:
-            log.debug("Update check failed: %s", reply.errorString())
+        if isinstance(result, Exception):
+            log.debug("Update check failed: %s", result)
             save_state(state, self.state_file)
             return
-        try:
-            data = json.loads(bytes(reply.readAll()).decode())
-            tag = str(data["tag_name"])
-            page = str(data.get("html_url") or RELEASES_PAGE)
-        except (ValueError, KeyError, TypeError) as exc:
-            log.debug("Unexpected update check reply: %s", exc)
-            save_state(state, self.state_file)
-            return
+        tag, page = result
         version = tag.lstrip("v")
         if is_newer(version):
             log.info("Pomodoro Pet %s is available (you have %s): %s", version, __version__, page)

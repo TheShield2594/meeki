@@ -66,10 +66,10 @@ def run_check(qapp, checker, server):
     hits = server.hits
     checker.check()
     deadline = time.monotonic() + 10
-    while checker._reply is not None and time.monotonic() < deadline:
+    while checker.busy and time.monotonic() < deadline:
         qapp.processEvents()
         time.sleep(0.01)
-    assert checker._reply is None, "the check never finished"
+    assert not checker.busy, "the check never finished"
     return server.hits - hits
 
 
@@ -96,6 +96,14 @@ def test_announces_a_new_release_once(qapp, server, checker):
     assert checker.seen[-1][0] == "0.4.0"
 
 
+def test_reply_is_handled_on_the_main_thread(qapp, server, checker):
+    threads = []
+    checker.update_available.connect(lambda *_: threads.append(threading.current_thread()))
+    server.reply = (200, release("v0.3.0"))
+    run_check(qapp, checker, server)
+    assert threads == [threading.main_thread()]
+
+
 def test_quiet_when_up_to_date_or_failing(qapp, server, checker):
     server.reply = (200, release("v0.2.0"))
     run_check(qapp, checker, server)
@@ -113,12 +121,13 @@ def test_checks_at_most_once_a_day(qapp, server, checker):
     run_check(qapp, checker, server)  # waits for the first one (a second check() is a no-op meanwhile)
     hits = server.hits
     checker.check_if_due()
-    assert checker._reply is None and server.hits == hits  # checked just now: not due
+    assert not checker.busy and server.hits == hits  # checked just now: not due
     state = updates.load_state(checker.state_file)
     state["last_check"] = time.time() - updates.CHECK_EVERY - 1
     updates.save_state(state, checker.state_file)
     checker.check_if_due()
-    assert checker._reply is not None
+    assert checker.busy
+    run_check(qapp, checker, server)
 
 
 def test_setting_turns_the_checker_on_and_off(controller):
@@ -138,6 +147,6 @@ def test_update_notice_from_the_pup(controller, monkeypatch):
 
 def test_first_check_waits_and_stop_cancels_it(checker):
     checker.start()
-    assert checker._first.isActive() and checker._reply is None
+    assert checker._first.isActive() and not checker.busy
     checker.stop()
     assert not checker._first.isActive() and not checker._timer.isActive()
