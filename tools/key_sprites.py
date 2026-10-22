@@ -65,6 +65,8 @@ def main() -> int:
     ap.add_argument("--ref-height", type=int, default=217, help="pup height in px on the 256 px frame")
     args = ap.parse_args()
 
+    if not 0.5 <= args.fps <= 60:  # the range the app accepts in an fps file (pomodoro_pet.assets)
+        ap.error("--fps must be between 0.5 and 60")
     pairs = [c.split("=", 1) for c in args.clips]
     if any(len(p) != 2 for p in pairs):
         ap.error("clips are given as STATE=CLIP.mp4")
@@ -93,11 +95,12 @@ def main() -> int:
         dest.mkdir(parents=True, exist_ok=True)
         for old in dest.glob("*.png"):
             old.unlink()
+        digits = max(2, len(str(len(frames) - 1)))  # the app sorts frames by name
         for i, frame in enumerate(frames):
             sprite = frame.crop(state_box).resize((SIZE, SIZE), Image.LANCZOS)
             # flat cartoon art: a 256-colour palette is near-lossless and ~5x smaller
             sprite = sprite.quantize(256, method=Image.Quantize.FASTOCTREE, dither=Image.Dither.NONE)
-            sprite.save(dest / f"{i:02d}.png", optimize=True)
+            sprite.save(dest / f"{i:0{digits}d}.png", optimize=True)
         (dest / "fps").write_text(f"{args.fps:g}\n")
         print(f"{state}: {len(frames)} frames -> {dest}")
     return 0

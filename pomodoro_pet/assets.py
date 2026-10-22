@@ -62,13 +62,16 @@ def _load_state(sprite_root: Path, state: str) -> list[QPixmap]:
     return []
 
 
+MIN_FPS, MAX_FPS = 0.5, 60  # rates a sprite folder's fps file may ask for
+
+
 def _load_fps(sprite_root: Path, state: str) -> float | None:
     """Optional frame rate for a state: a file <root>/<state>/fps holding a number."""
     try:
         fps = float((sprite_root / state / "fps").read_text().strip())
     except (OSError, ValueError):
         return None
-    return fps if 0 < fps <= 60 else None
+    return fps if MIN_FPS <= fps <= MAX_FPS else None
 
 
 class SpriteSet(dict):

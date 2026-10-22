@@ -49,8 +49,14 @@ def test_sprite_folders_can_set_their_frame_rate(tmp_path, controller):
     (tmp_path / "focusing").mkdir()
     shutil.copy(asset("sprites") / "focusing" / "00.png", tmp_path / "focusing")
     (tmp_path / "focusing" / "fps").write_text("not a number")
+    shutil.copytree(asset("sprites") / "break", tmp_path / "break")
+    (tmp_path / "break" / "fps").write_text("1e-308")  # would overflow the timer interval
     sprites = load_sprites(str(tmp_path))
     assert sprites.fps["idle"] == 5
     assert "focusing" not in sprites.fps  # a broken fps file is ignored: the built-in rate applies
+    assert "break" not in sprites.fps
     controller.pet.set_sprites(sprites)
     assert controller.pet._fps("idle") == 5
+    controller.pet.life.napping = True
+    controller.pet._refresh_state()  # the nap pose starts its timer without overflowing
+    assert controller.pet._anim_state == "break"
