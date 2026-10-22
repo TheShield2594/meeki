@@ -112,7 +112,7 @@ def test_one_shot_animation_plays_then_returns_to_idle(controller):
     pet._refresh_state()
     for _ in range(len(pet.sprites["yawn"])):
         pet._advance()
-    assert pet._action is None and pet._target_state() == "idle"
+    assert pet._action is None and pet._target_state() == "mood_content"  # back to the idle pose
 
 
 def test_nap_and_wake_up(controller):
@@ -128,4 +128,4 @@ def test_idle_animations_can_be_turned_off(controller):
     assert controller.pet.idle_animations is False
     controller.pet.life.napping = True
     controller.pet._life_tick()  # with idle animations off, no naps either
-    assert controller.pet.life.napping is False and controller.pet._target_state() == "idle"
+    assert controller.pet.life.napping is False and controller.pet._target_state() == "mood_content"

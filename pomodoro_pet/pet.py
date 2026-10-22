@@ -17,11 +17,13 @@ from .wayland import running_on_wayland
 
 WINDOW_TITLE = "Pomodoro Pet"
 
-# frames per second for each animation
+# frames per second for each animation, unless the sprite set has an fps file
 FPS = {
     "idle": 3, "focusing": 4, "break": 2, "celebrating": 8, "sulky": 3,
     "petted": 6, "look": 3, "yawn": 4, "scratch": 6, "stretch": 3,
 }
+# Moods cheerful enough for the one-shot idle animations (look, yawn, ...)
+LIVELY_MOODS = ("content", "happy", "overjoyed")
 PET_SECONDS = 2.0  # how long the petted pose lasts after the last rub
 
 OVERTIME_COLOR = QColor("#8e24aa")
@@ -179,8 +181,9 @@ class PetWindow(QWidget):
 
     def _life_tick(self) -> None:
         base = self._base_state()
-        idle = self.idle_animations and base in ("idle", "sulky") and self._action is None and not self.being_petted
-        available = {name for name in IdleLife.ACTIONS if self.sprites.get(name)} if base == "idle" else set()
+        idle = self.idle_animations and self._is_idle_pose(base) and self._action is None and not self.being_petted
+        lively = base == "idle" or (base.startswith("mood_") and self.mood_level in LIVELY_MOODS)
+        available = {name for name in IdleLife.ACTIONS if self.sprites.get(name)} if lively else set()
         decision = self.life.tick(idle, available)
         if decision == "nap":
             self._refresh_state()
@@ -188,10 +191,16 @@ class PetWindow(QWidget):
             self.play(decision)
 
     # ---- state & animation ---------------------------------------------
+    @staticmethod
+    def _is_idle_pose(state: str) -> bool:
+        return state in ("idle", "sulky") or state.startswith("mood_")
+
     def _base_state(self) -> str:
         t = self.timer
         if t.state in (State.RUNNING, State.PAUSED):
             return "break" if t.phase.is_break else "focusing"
+        if self.sprites.get(f"mood_{self.mood_level}"):
+            return f"mood_{self.mood_level}"
         if self.mood_level in ("sulky", "sad") and self.sprites.get("sulky"):
             return "sulky"
         return "idle"
@@ -202,7 +211,7 @@ class PetWindow(QWidget):
         base = self._base_state()
         if self.being_petted:
             return "petted" if self.sprites.get("petted") else base
-        if base in ("idle", "sulky"):
+        if self._is_idle_pose(base):
             if self.life.napping:
                 return "break"  # curled up for a nap
             if self._action:
@@ -218,8 +227,11 @@ class PetWindow(QWidget):
         if paused:
             self._anim.stop()  # freeze the pose while paused
         else:
-            self._anim.start(int(1000 / FPS.get(state, 3)))
+            self._anim.start(int(1000 / self._fps(state)))
         self.update()
+
+    def _fps(self, state: str) -> float:
+        return getattr(self.sprites, "fps", {}).get(state) or FPS.get(state, 3)
 
     def _advance(self) -> None:
         frames = self.sprites.get(self._anim_state) or [None]
