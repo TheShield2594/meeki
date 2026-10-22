@@ -6,7 +6,7 @@
 #   3. push PKGBUILD + .SRCINFO to ssh://aur@aur.archlinux.org/pomodoro-pet-git.git
 pkgname=pomodoro-pet-git
 _name=pomodoro-pet
-pkgver=0.3.0
+pkgver=0.4.0
 pkgrel=1
 pkgdesc="A Pomodoro desktop pet (Bichon x Biewer Terrier pup) for KDE Plasma"
 arch=('any')
