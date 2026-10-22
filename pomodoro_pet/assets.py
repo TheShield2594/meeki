@@ -12,9 +12,11 @@ from PySide6.QtGui import QColor, QPainter, QPixmap
 log = logging.getLogger(__name__)
 
 STATES = ("idle", "focusing", "break", "celebrating")
-# Optional: "sulky" idle pose for a low mood, "petted", and one-shot idle
-# animations. Missing ones are simply not used.
-OPTIONAL_STATES = ("sulky", "petted", "look", "yawn", "scratch", "stretch")
+MOOD_LEVELS = ("sad", "sulky", "content", "happy", "overjoyed")
+# Optional: "sulky" idle pose for a low mood, "petted", one-shot idle
+# animations, and an idle pose per mood level ("mood_happy", ...). Missing
+# ones are simply not used.
+OPTIONAL_STATES = ("sulky", "petted", "look", "yawn", "scratch", "stretch") + tuple(f"mood_{m}" for m in MOOD_LEVELS)
 
 
 def assets_dir() -> Path | None:
@@ -90,18 +92,23 @@ def load_sprites(override_dir: str | None = None) -> dict[str, list[QPixmap]]:
         roots.append(bundled)
 
     sprites: dict[str, list[QPixmap]] = {}
+    idle_roots = roots
     for state in STATES:
         frames: list[QPixmap] = []
-        for root in roots:
+        for i, root in enumerate(roots):
             frames = _load_state(root, state)
             if frames:
+                if state == "idle":
+                    idle_roots = roots[: i + 1]
                 break
         if not frames:
             log.warning("No sprite frames for state %r; using placeholder", state)
             frames = _placeholder(state)
         sprites[state] = frames
     for state in OPTIONAL_STATES:
-        for root in roots:
+        # a mood pose replaces the idle pose, so it has to come from the same set:
+        # custom idle art never turns into the bundled pup when the mood changes
+        for root in idle_roots if state.startswith("mood_") else roots:
             frames = _load_state(root, state)
             if frames:
                 sprites[state] = frames
