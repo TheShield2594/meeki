@@ -41,3 +41,16 @@ def test_custom_idle_art_does_not_borrow_bundled_mood_poses(tmp_path):
     shutil.copytree(bundled / "mood_happy", tmp_path / "mood_happy")
     assert "mood_happy" in load_sprites(str(tmp_path))
     assert "mood_happy" in load_sprites(str(tmp_path / "nothing-here"))  # no custom idle: bundled set
+
+
+def test_sprite_folders_can_set_their_frame_rate(tmp_path, controller):
+    shutil.copytree(asset("sprites") / "idle", tmp_path / "idle")
+    (tmp_path / "idle" / "fps").write_text("5\n")
+    (tmp_path / "focusing").mkdir()
+    shutil.copy(asset("sprites") / "focusing" / "00.png", tmp_path / "focusing")
+    (tmp_path / "focusing" / "fps").write_text("not a number")
+    sprites = load_sprites(str(tmp_path))
+    assert sprites.fps["idle"] == 5
+    assert "focusing" not in sprites.fps  # a broken fps file is ignored: the built-in rate applies
+    controller.pet.set_sprites(sprites)
+    assert controller.pet._fps("idle") == 5

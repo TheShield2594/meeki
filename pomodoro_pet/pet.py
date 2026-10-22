@@ -17,11 +17,10 @@ from .wayland import running_on_wayland
 
 WINDOW_TITLE = "Pomodoro Pet"
 
-# frames per second for each animation
+# frames per second for each animation, unless the sprite set has an fps file
 FPS = {
     "idle": 3, "focusing": 4, "break": 2, "celebrating": 8, "sulky": 3,
     "petted": 6, "look": 3, "yawn": 4, "scratch": 6, "stretch": 3,
-    "mood_sad": 6, "mood_sulky": 6, "mood_content": 6, "mood_happy": 8, "mood_overjoyed": 8,
 }
 # Moods cheerful enough for the one-shot idle animations (look, yawn, ...)
 LIVELY_MOODS = ("content", "happy", "overjoyed")
@@ -228,8 +227,11 @@ class PetWindow(QWidget):
         if paused:
             self._anim.stop()  # freeze the pose while paused
         else:
-            self._anim.start(int(1000 / FPS.get(state, 3)))
+            self._anim.start(int(1000 / self._fps(state)))
         self.update()
+
+    def _fps(self, state: str) -> float:
+        return getattr(self.sprites, "fps", {}).get(state) or FPS.get(state, 3)
 
     def _advance(self) -> None:
         frames = self.sprites.get(self._anim_state) or [None]

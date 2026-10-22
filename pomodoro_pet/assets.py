@@ -62,6 +62,29 @@ def _load_state(sprite_root: Path, state: str) -> list[QPixmap]:
     return []
 
 
+def _load_fps(sprite_root: Path, state: str) -> float | None:
+    """Optional frame rate for a state: a file <root>/<state>/fps holding a number."""
+    try:
+        fps = float((sprite_root / state / "fps").read_text().strip())
+    except (OSError, ValueError):
+        return None
+    return fps if 0 < fps <= 60 else None
+
+
+class SpriteSet(dict):
+    """Frames per state, plus the frame rates the sprite set asks for (``fps``)."""
+
+    def __init__(self):
+        super().__init__()
+        self.fps: dict[str, float] = {}
+
+    def add(self, root: Path, state: str, frames: list[QPixmap]) -> None:
+        self[state] = frames
+        fps = _load_fps(root, state)
+        if fps:
+            self.fps[state] = fps
+
+
 def _placeholder(state: str) -> list[QPixmap]:
     """Last-resort frames so the app still runs with no assets at all."""
     colors = {"idle": "#f5f0e6", "focusing": "#e57373", "break": "#81c784", "celebrating": "#ffd54f"}
@@ -83,7 +106,7 @@ def _placeholder(state: str) -> list[QPixmap]:
     return frames
 
 
-def load_sprites(override_dir: str | None = None) -> dict[str, list[QPixmap]]:
+def load_sprites(override_dir: str | None = None) -> SpriteSet:
     roots: list[Path] = []
     if override_dir:
         roots.append(Path(os.path.expanduser(override_dir)))
@@ -91,26 +114,25 @@ def load_sprites(override_dir: str | None = None) -> dict[str, list[QPixmap]]:
     if bundled:
         roots.append(bundled)
 
-    sprites: dict[str, list[QPixmap]] = {}
+    sprites = SpriteSet()
     idle_roots = roots
     for state in STATES:
-        frames: list[QPixmap] = []
         for i, root in enumerate(roots):
             frames = _load_state(root, state)
             if frames:
+                sprites.add(root, state, frames)
                 if state == "idle":
                     idle_roots = roots[: i + 1]
                 break
-        if not frames:
+        else:
             log.warning("No sprite frames for state %r; using placeholder", state)
-            frames = _placeholder(state)
-        sprites[state] = frames
+            sprites[state] = _placeholder(state)
     for state in OPTIONAL_STATES:
         # a mood pose replaces the idle pose, so it has to come from the same set:
         # custom idle art never turns into the bundled pup when the mood changes
         for root in idle_roots if state.startswith("mood_") else roots:
             frames = _load_state(root, state)
             if frames:
-                sprites[state] = frames
+                sprites.add(root, state, frames)
                 break
     return sprites

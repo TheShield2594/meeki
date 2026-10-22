@@ -7,6 +7,9 @@ for each animation state, plus the app icon and a chime.
 
     python tools/generate_assets.py            # writes into ./assets
 
+The bundled sprites are now AI-generated (docs/ai-sprites.md); states made
+by tools/key_sprites.py (they have an `fps` file) are kept unless --force.
+
 Replace any of the generated PNGs with real art: each state is a folder of
 frames (assets/sprites/<state>/NN.png) or a horizontal sprite sheet
 (assets/sprites/<state>.png, square frames). Frames are 256x256 and are drawn
@@ -444,20 +447,34 @@ def write_chime(path: Path, notes=((0.0, 880.0), (0.16, 1318.5)), dur: float = 1
         w.writeframes(bytes(frames))
 
 
+def icon(out: Path, size: int) -> QImage:
+    """The app icon: the bundled content pup if there is one, else the drawn idle pup."""
+    art = out / "sprites" / "mood_content" / "00.png"
+    if art.is_file():
+        return QImage(str(art)).scaled(size, size, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+    return render(frame_idle, 0, size)
+
+
 def main() -> int:
-    out = Path(sys.argv[1]) if len(sys.argv) > 1 else Path(__file__).resolve().parent.parent / "assets"
+    args = [a for a in sys.argv[1:] if a != "--force"]
+    force = "--force" in sys.argv[1:]
+    out = Path(args[0]) if args else Path(__file__).resolve().parent.parent / "assets"
     app = QGuiApplication.instance() or QGuiApplication([])  # noqa: F841
     for state, (fn, count) in STATES.items():
         d = out / "sprites" / state
+        if (d / "fps").exists() and not force:
+            print(f"Keeping {d} (made by tools/key_sprites.py; --force redraws it)")
+            continue
         d.mkdir(parents=True, exist_ok=True)
         for old in d.glob("*.png"):
             old.unlink()
+        (d / "fps").unlink(missing_ok=True)
         for i in range(count):
             render(fn, i).save(str(d / f"{i:02d}.png"))
     (out / "icons").mkdir(parents=True, exist_ok=True)
     for size in (256, 128, 64, 48):
-        render(frame_idle, 0, size).save(str(out / "icons" / f"pomodoro-pet-{size}.png"))
-    render(frame_idle, 0, 256).save(str(out / "icons" / "pomodoro-pet.png"))
+        icon(out, size).save(str(out / "icons" / f"pomodoro-pet-{size}.png"))
+    icon(out, 256).save(str(out / "icons" / "pomodoro-pet.png"))
     (out / "sounds").mkdir(parents=True, exist_ok=True)
     write_chime(out / "sounds" / "chime.wav")
     write_chime(out / "sounds" / "warn.wav", notes=((0.0, 659.3),), dur=0.6, volume=0.16)  # one quiet E5

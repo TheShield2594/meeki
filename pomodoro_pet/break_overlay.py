@@ -117,7 +117,7 @@ class BreakOverlay(QObject):
     skip_requested = Signal()
     snoozed = Signal(int)  # snoozes used so far
 
-    def __init__(self, frames, pet_name: str, parent: QObject | None = None):
+    def __init__(self, frames, pet_name: str, parent: QObject | None = None, fps: float = 2):
         super().__init__(parent)
         self.frames = frames
         self.pet_name = pet_name
@@ -125,12 +125,18 @@ class BreakOverlay(QObject):
         self.snoozes = 0
         self.remaining = 0
         self._tip = random.choice(TIPS)
-        self._anim = QTimer(self, interval=500)
+        self._anim = QTimer(self, interval=round(1000 / fps))
         self._anim.timeout.connect(self._animate)
         self._tip_timer = QTimer(self, interval=25_000)
         self._tip_timer.timeout.connect(self._next_tip)
         self._snooze_timer = QTimer(self, singleShot=True)
         self._snooze_timer.timeout.connect(self._show)
+
+    def set_frames(self, frames, fps: float = 2) -> None:
+        self.frames = frames
+        self._anim.setInterval(round(1000 / fps))
+        for w in self.windows:
+            w.sprite.frames = frames
 
     @property
     def active(self) -> bool:

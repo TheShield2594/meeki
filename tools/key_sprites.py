@@ -2,7 +2,7 @@
 """Turn green-screen animation clips into sprite frames.
 
 Each clip (an MP4 of the pup on a flat green background, made with the
-prompts in docs/mood-sprites.md) becomes assets/sprites/<state>/NN.png:
+prompts in docs/ai-sprites.md) becomes assets/sprites/<state>/NN.png:
 frames sampled at --fps, the green keyed out to transparency, and every clip
 cropped with the same box so the pup keeps one size and ground line across
 states.
@@ -83,17 +83,22 @@ def main() -> int:
 
     for state, frames in keyed.items():
         x0, y0, x1, y1 = union_box(frames)
-        if x0 < box[0] or y0 < box[1] or x1 > box[2] or y1 > box[3]:
+        state_box = box
+        if x0 < box[0] or x1 > box[2]:  # a wide pose (the nap): centre it on itself, same scale and ground
+            left = (x0 + x1) // 2 - side // 2
+            state_box = (left, box[1], left + side, box[3])
+        if x0 < state_box[0] or y0 < state_box[1] or x1 > state_box[2] or y1 > state_box[3]:
             print(f"warning: {state} pokes out of the shared frame and will be clipped", file=sys.stderr)
         dest = args.out / state
         dest.mkdir(parents=True, exist_ok=True)
         for old in dest.glob("*.png"):
             old.unlink()
         for i, frame in enumerate(frames):
-            sprite = frame.crop(box).resize((SIZE, SIZE), Image.LANCZOS)
+            sprite = frame.crop(state_box).resize((SIZE, SIZE), Image.LANCZOS)
             # flat cartoon art: a 256-colour palette is near-lossless and ~5x smaller
             sprite = sprite.quantize(256, method=Image.Quantize.FASTOCTREE, dither=Image.Dither.NONE)
             sprite.save(dest / f"{i:02d}.png", optimize=True)
+        (dest / "fps").write_text(f"{args.fps:g}\n")
         print(f"{state}: {len(frames)} frames -> {dest}")
     return 0
 

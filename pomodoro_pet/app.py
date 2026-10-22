@@ -92,7 +92,7 @@ class Controller:
         self._auto_paused: float | None = None  # seconds rewound when we paused for you
         self._break_key = None  # (round, phase) of the break being coached
         self.coach = BreakCoach()
-        self.overlay = BreakOverlay(sprites["break"], cfg["pet_name"])
+        self.overlay = BreakOverlay(sprites["break"], cfg["pet_name"], fps=sprites.fps.get("break", 2))
         self.overlay.skip_requested.connect(self.timer.skip)
         self.overlay.snoozed.connect(lambda n: self.say(_("Okay, one more minute… 🐾")))
         self.timer.tick.connect(self.overlay.set_remaining)
@@ -221,7 +221,7 @@ class Controller:
         if "sprite_dir" in keys:
             sprites = load_sprites(c["sprite_dir"])
             self.pet.set_sprites(sprites)
-            self.overlay.frames = sprites["break"]
+            self.overlay.set_frames(sprites["break"], sprites.fps.get("break", 2))
         if "pet_name" in keys:
             self.overlay.pet_name = c["pet_name"]
             if self.stats_window is not None:
