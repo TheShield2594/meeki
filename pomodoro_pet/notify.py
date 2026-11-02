@@ -2,7 +2,8 @@
 
 Notifications go through `notify-send` (libnotify), falling back to a raw
 `gdbus` call to org.freedesktop.Notifications, then `kdialog`. Plasma shows all
-of them as regular KDE notifications.
+of them as regular KDE notifications. Notifications with buttons go through
+`gdbus` first (see notify_with_actions).
 
 Sound is played with whatever PipeWire/Pulse/ALSA player exists
 (`pw-play`, `paplay`, `aplay`). All commands are fire-and-forget.
@@ -15,6 +16,7 @@ back to plain notifications.
 from __future__ import annotations
 
 import logging
+import re
 import shutil
 import subprocess
 import sys
@@ -105,15 +107,100 @@ def play_sound(sound_file: str | None = None) -> None:
 
 
 _pending: list = []  # keep running QProcess objects alive
+_waiting: dict[int, tuple[set[str], object]] = {}  # notification id -> (button names, on_action)
+_listener = None
+
+_SERVICE = "org.freedesktop.Notifications"
+_PATH = "/org/freedesktop/Notifications"
+
+
+def _listen() -> bool:
+    """Subscribe once to the notification server's button and close signals."""
+    global _listener
+    if _listener is not None:
+        return True
+    try:
+        from PySide6.QtCore import QObject, Slot
+        from PySide6.QtDBus import QDBusConnection
+    except ImportError:
+        return False
+
+    class Listener(QObject):
+        @Slot("uint", str)
+        def action_invoked(self, nid: int, key: str) -> None:
+            names, on_action = _waiting.get(nid, (set(), None))
+            if key in names:
+                del _waiting[nid]
+                on_action(key)
+
+        @Slot("uint", "uint")
+        def closed(self, nid: int, _reason: int) -> None:
+            _waiting.pop(nid, None)
+
+    bus = QDBusConnection.sessionBus()
+    if not bus.isConnected():
+        return False
+    listener = Listener()
+    if not (bus.connect(_SERVICE, _PATH, _SERVICE, "ActionInvoked", listener, "1action_invoked(uint,QString)")
+            and bus.connect(_SERVICE, _PATH, _SERVICE, "NotificationClosed", listener, "1closed(uint,uint)")):
+        return False
+    _listener = listener
+    return True
 
 
 def notify_with_actions(summary: str, body: str, actions: list[tuple[str, str]], on_action) -> None:
     """Notification with buttons, e.g. [("resume", "Resume")]. Calls
-    on_action(name) when one is clicked. Needs libnotify's notify-send
-    (0.7.10+); otherwise falls back to a plain notification."""
-    if not shutil.which("notify-send"):
+    on_action(name) when one is clicked.
+
+    Sent with `gdbus` and answered over QtDBus: PySide6 can't marshal the uint32
+    Notify wants, and Ubuntu's AppArmor profile for notify-send (26.04+) blocks
+    its GetCapabilities call, so notify-send drops the buttons there. Falls back
+    to notify-send, then to a plain notification."""
+    if shutil.which("gdbus") and _listen():
+        _notify_via_gdbus(summary, body, actions, on_action)
+    elif shutil.which("notify-send"):
+        _notify_send_with_actions(summary, body, actions, on_action)
+    else:
         notify(summary, body)
-        return
+
+
+def _notify_via_gdbus(summary: str, body: str, actions: list[tuple[str, str]], on_action) -> None:
+    from PySide6.QtCore import QProcess
+
+    proc = QProcess()
+    buttons = ", ".join(f"{_gvariant_str(name)}, {_gvariant_str(label)}" for name, label in actions)
+    argv = [
+        "call", "--session", "--dest", _SERVICE, "--object-path", _PATH, "--method", f"{_SERVICE}.Notify", "--",
+        _gvariant_str(APP_NAME), "0", _gvariant_str(APP_ID), _gvariant_str(summary), _gvariant_str(body),
+        f"[{buttons}]", f"{{'desktop-entry': <{_gvariant_str(APP_ID)}>}}", "-1",
+    ]
+
+    def finished(*_args) -> None:
+        if proc not in _pending:
+            return  # cancelled (app quitting)
+        _pending.remove(proc)
+        try:
+            out = bytes(proc.readAllStandardOutput()).decode(errors="replace")
+            err = bytes(proc.readAllStandardError()).decode(errors="replace").strip()
+        except RuntimeError:  # the process object is already gone
+            return
+        match = re.search(r"uint32 (\d+)", out)
+        if match:
+            _waiting[int(match.group(1))] = ({name for name, _ in actions}, on_action)
+            return
+        log.debug("gdbus Notify failed: %s", err)
+        if shutil.which("notify-send"):
+            _notify_send_with_actions(summary, body, actions, on_action)
+        else:
+            notify(summary, body)
+
+    proc.finished.connect(finished)
+    _pending.append(proc)
+    proc.start("gdbus", argv)
+
+
+def _notify_send_with_actions(summary: str, body: str, actions: list[tuple[str, str]], on_action) -> None:
+    """notify-send (libnotify 0.7.10+) waits for a click and prints the button's name."""
     from PySide6.QtCore import QProcess
 
     proc = QProcess()
@@ -142,6 +229,7 @@ def notify_with_actions(summary: str, body: str, actions: list[tuple[str, str]],
 def cancel_pending() -> None:
     """Stop waiting for notification buttons (on quit). The notifications
     themselves stay in the desktop's history."""
+    _waiting.clear()
     while _pending:
         proc = _pending.pop()
         try:
