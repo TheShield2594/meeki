@@ -33,14 +33,14 @@ jobs:
           echo "bus: $DBUS_SESSION_BUS_ADDRESS"
           python tests/fake_desktop.py /tmp/log &
           for i in $(seq 50); do grep -q ready /tmp/log 2>/dev/null && break; sleep 0.2; done
-          dbus-monitor --session > /tmp/monitor 2>&1 &
+          dbus-monitor --session "interface='org.freedesktop.Notifications'" "type='method_return'" "type='error'" > /tmp/monitor 2>&1 &
           sleep 1
           gdbus call --session --dest org.freedesktop.Notifications --object-path /org/freedesktop/Notifications \
             --method org.freedesktop.Notifications.GetCapabilities || true
           gdbus call --session --dest org.freedesktop.Notifications --object-path /org/freedesktop/Notifications \
             --method org.freedesktop.Notifications.GetServerInformation || true
           G_MESSAGES_DEBUG=all timeout 5 notify-send --app-name=Test --action=resume=Resume --action=credit=Credit \
-            -- "Hello" "body" ; echo "exit $?"
+            -- "Hello" "body" || echo "notify-send exit $?"
           sleep 1
           echo "----- fake server log"; cat /tmp/log
           echo "----- dbus-monitor"; cat /tmp/monitor | head -200
