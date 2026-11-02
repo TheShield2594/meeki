@@ -1,0 +1,46 @@
+name: Diagnose notify-send actions (temporary)
+
+on:
+  push:
+    branches: [claude/optimistic-goldberg-95jmon]
+
+permissions:
+  contents: read
+
+jobs:
+  diag:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: "3.12"
+      - run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libegl1 libgl1 libxkbcommon0 libfontconfig1 libdbus-1-3 dbus dbus-bin libglib2.0-bin libnotify-bin
+          pip install PySide6-Essentials
+      - name: notify-send --action against the fake server
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          set -x
+          notify-send --version || true
+          eval "$(dbus-launch --sh-syntax 2>/dev/null)" || {
+            dbus-daemon --session --fork --print-address=3 3>addr; export DBUS_SESSION_BUS_ADDRESS=$(cat addr); }
+          echo "bus: $DBUS_SESSION_BUS_ADDRESS"
+          python tests/fake_desktop.py /tmp/log &
+          for i in $(seq 50); do grep -q ready /tmp/log 2>/dev/null && break; sleep 0.2; done
+          dbus-monitor --session > /tmp/monitor 2>&1 &
+          sleep 1
+          gdbus call --session --dest org.freedesktop.Notifications --object-path /org/freedesktop/Notifications \
+            --method org.freedesktop.Notifications.GetCapabilities || true
+          gdbus call --session --dest org.freedesktop.Notifications --object-path /org/freedesktop/Notifications \
+            --method org.freedesktop.Notifications.GetServerInformation || true
+          G_MESSAGES_DEBUG=all timeout 5 notify-send --app-name=Test --action=resume=Resume --action=credit=Credit \
+            -- "Hello" "body" ; echo "exit $?"
+          sleep 1
+          echo "----- fake server log"; cat /tmp/log
+          echo "----- dbus-monitor"; cat /tmp/monitor | head -200
