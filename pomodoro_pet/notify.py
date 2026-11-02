@@ -121,7 +121,7 @@ def _listen() -> bool:
         return True
     try:
         from PySide6.QtCore import QObject, Slot
-        from PySide6.QtDBus import QDBusConnection
+        from PySide6.QtDBus import QDBusConnection, QDBusServiceWatcher
     except ImportError:
         return False
 
@@ -137,6 +137,12 @@ def _listen() -> bool:
         def closed(self, nid: int, _reason: int) -> None:
             _waiting.pop(nid, None)
 
+        @Slot(str, str, str)
+        def server_changed(self, *_owners) -> None:
+            # ids are only unique per server instance: a restarted server starts
+            # over, and an old id must not catch someone else's button
+            _waiting.clear()
+
     bus = QDBusConnection.sessionBus()
     if not bus.isConnected():
         return False
@@ -144,6 +150,8 @@ def _listen() -> bool:
     if not (bus.connect(_SERVICE, _PATH, _SERVICE, "ActionInvoked", listener, "1action_invoked(uint,QString)")
             and bus.connect(_SERVICE, _PATH, _SERVICE, "NotificationClosed", listener, "1closed(uint,uint)")):
         return False
+    listener.watcher = QDBusServiceWatcher(_SERVICE, bus, QDBusServiceWatcher.WatchForOwnerChange, listener)
+    listener.watcher.serviceOwnerChanged.connect(listener.server_changed)
     _listener = listener
     return True
 
