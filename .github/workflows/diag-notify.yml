@@ -43,4 +43,4 @@ jobs:
             -- "Hello" "body" || echo "notify-send exit $?"
           sleep 1
           echo "----- fake server log"; cat /tmp/log
-          echo "----- dbus-monitor"; cat /tmp/monitor | head -200
+          echo "----- dbus-monitor"; grep -v '^ *<\|^"\|DOCTYPE' /tmp/monitor
